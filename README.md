@@ -67,7 +67,7 @@ PTE lets you use both standard Spring MVC controllers and automatic file-based r
 
 ---
 
-## 📖 Feature Guide & Code Samples
+##  Feature Guide & Code Samples
 
 Here is a complete list of all template features supported in PTE since day one:
 
