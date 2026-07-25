@@ -413,6 +413,31 @@ class FeatureTest {
       }
    }
 
+   @Nested
+   @DisplayName("Bytecode Debugging Test")
+   class BytecodeDebuggingTest {
+      @Test
+      @DisplayName("Prints java source to stdout when pte.debug system property is true")
+      void printsJavaSourceToStdoutWhenDebugPropertyIsTrue() {
+         System.setProperty("pte.debug", "true");
+         final var originalOut = System.out;
+         final var bos = new java.io.ByteArrayOutputStream();
+         final var printStream = new java.io.PrintStream(bos);
+         System.setOut(printStream);
+
+         try {
+            engine.compileToBytecode("Hello |name|!");
+            final var output = bos.toString();
+            if (io.lemadane.piped.template.engine.codegen.InMemoryBytecodeCompiler.isAvailable()) {
+               assertTrue(output.contains("public final class") || output.contains("writer.write("));
+            }
+         } finally {
+            System.setProperty("pte.debug", "false");
+            System.setOut(originalOut);
+         }
+      }
+   }
+
    private static String compact(String value) {
       return value
             .replaceAll("\\s+", " ")

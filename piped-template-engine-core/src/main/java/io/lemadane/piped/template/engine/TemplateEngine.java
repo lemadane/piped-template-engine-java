@@ -140,6 +140,9 @@ public final class TemplateEngine {
             var ast = compile(template).getRootNode();
             String className = io.lemadane.piped.template.engine.codegen.JavaCodeGenerator.generateUniqueClassName();
             String javaSource = new io.lemadane.piped.template.engine.codegen.JavaCodeGenerator().generateClassSource(ast, className);
+            if ("true".equalsIgnoreCase(System.getProperty("pte.debug")) || "true".equalsIgnoreCase(System.getenv("pte.debug"))) {
+                System.out.println(javaSource);
+            }
             Class<?> clazz = new io.lemadane.piped.template.engine.codegen.InMemoryBytecodeCompiler().compile(className, javaSource);
             return (io.lemadane.piped.template.engine.codegen.CompiledTemplateExecutable) clazz.getDeclaredConstructor().newInstance();
         } catch (Exception e) {

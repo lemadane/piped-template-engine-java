@@ -470,6 +470,28 @@ class FilterTest {
       }
    }
 
+   @Nested
+   @DisplayName("Comma separation for map and array literals")
+   class LiteralCommaSeparationTest {
+      @Test
+      @DisplayName("Does not split map literals on comma")
+      void doesNotSplitMapLiteralsOnComma() {
+         final var html = engine.renderString(
+               "|{ text: status, status: status }|",
+               Map.of("{ text: status, status: status }", "Success"));
+         assertEquals("Success", html);
+      }
+
+      @Test
+      @DisplayName("Does not split array literals on comma")
+      void doesNotSplitArrayLiteralsOnComma() {
+         final var html = engine.renderString(
+               "|[a, b, c]|",
+               Map.of("[a, b, c]", "ArrayValue"));
+         assertEquals("ArrayValue", html);
+      }
+   }
+
    private static String compact(String value) {
       return value
             .replaceAll("\\s+", " ")

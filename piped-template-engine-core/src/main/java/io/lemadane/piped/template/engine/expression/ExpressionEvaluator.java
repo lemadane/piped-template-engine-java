@@ -620,6 +620,8 @@ public final class ExpressionEvaluator {
             boolean insideSingleQuote = false;
             boolean insideDoubleQuote = false;
             int parenthesisDepth = 0;
+            int bracketDepth = 0;
+            int braceDepth = 0;
 
             for (int index = 0; index < expression.length(); index++) {
                   final var current = expression.charAt(index);
@@ -649,7 +651,31 @@ public final class ExpressionEvaluator {
                               continue;
                         }
 
-                        if (parenthesisDepth == 0 && current == ',') {
+                        if (current == '[') {
+                              bracketDepth++;
+                              currentPart.append(current);
+                              continue;
+                        }
+
+                        if (current == ']') {
+                              bracketDepth--;
+                              currentPart.append(current);
+                              continue;
+                        }
+
+                        if (current == '{') {
+                              braceDepth++;
+                              currentPart.append(current);
+                              continue;
+                        }
+
+                        if (current == '}') {
+                              braceDepth--;
+                              currentPart.append(current);
+                              continue;
+                        }
+
+                        if (parenthesisDepth == 0 && bracketDepth == 0 && braceDepth == 0 && current == ',') {
                               final var part = currentPart.toString().trim();
 
                               if (part.isBlank()) {
