@@ -10,11 +10,19 @@ public class PipedPageContext {
     private final Map<String, String> headers;
     private final Map<String, Object> params;
     private final Map<String, Object> session;
+    private final boolean isHTMX;
+    private final String hxTarget;
+    private final String hxTrigger;
+    private final String hxCurrentURL;
 
     public PipedPageContext(HttpServletRequest request) {
         this.requestUri = request.getRequestURI();
         this.queryString = request.getQueryString();
         this.method = request.getMethod();
+        this.isHTMX = "true".equals(request.getHeader("HX-Request"));
+        this.hxTarget = request.getHeader("HX-Target");
+        this.hxTrigger = request.getHeader("HX-Trigger");
+        this.hxCurrentURL = request.getHeader("HX-Current-URL");
 
         // Extract headers
         Map<String, String> headerMap = new LinkedHashMap<>();
@@ -71,5 +79,25 @@ public class PipedPageContext {
 
     public Map<String, Object> getSession() {
         return session;
+    }
+
+    public boolean isHTMX() {
+        return isHTMX;
+    }
+
+    public boolean isIsHTMX() {
+        return isHTMX;
+    }
+
+    public String getHxTarget() {
+        return hxTarget;
+    }
+
+    public String getHxTrigger() {
+        return hxTrigger;
+    }
+
+    public String getHxCurrentURL() {
+        return hxCurrentURL;
     }
 }

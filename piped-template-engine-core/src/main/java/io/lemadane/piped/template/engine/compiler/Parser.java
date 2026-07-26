@@ -66,6 +66,12 @@ public final class Parser {
                 case MINIFY -> nodes.add(parseMinify(token, cursor));
                 case PAGE -> parsePageMetadata(token);
                 case ATTEMPT -> nodes.add(parseAttempt(token, cursor));
+                case PWA -> nodes.add(parsePWA(token));
+                case HTMX -> nodes.add(parseHTMX(token));
+                case HX_ATTR -> nodes.add(parseHXAttr(token));
+                case ALPINE -> nodes.add(parseAlpine(token));
+                case STATE -> nodes.add(parseState(token));
+                case ALPINE_ATTR -> nodes.add(parseAlpineAttr(token));
                 default -> {
                     var outputExpr = outputExpressionParser.parse(token.value());
                     nodes.add(new ExpressionNode(outputExpr, evaluator));
@@ -286,6 +292,217 @@ public final class Parser {
         }
 
         return new io.lemadane.piped.template.engine.ast.AttemptNode(body, recoverBlock, errorVarName);
+    }
+
+    private PWANode parsePWA(Token token) {
+        String val = token.value().trim();
+        if (val.startsWith("pwa")) {
+            val = val.substring(3).trim();
+        }
+        java.util.Map<String, String> attrs = parseKeyValuePairs(val);
+        String name = attrs.get("name");
+        if (name == null || name.isEmpty()) {
+            name = attrs.get("title");
+        }
+        return new PWANode(
+            name,
+            attrs.get("manifest"),
+            attrs.get("theme"),
+            attrs.get("icon"),
+            attrs.get("sw"),
+            attrs.get("statusColor")
+        );
+    }
+
+    private HTMXNode parseHTMX(Token token) {
+        String val = token.value().trim();
+        if (val.startsWith("htmx")) {
+            val = val.substring(4).trim();
+        }
+        java.util.Map<String, String> attrs = parseKeyValuePairs(val);
+        List<String> extensions = new ArrayList<>();
+        String extStr = attrs.get("ext");
+        if (extStr != null && !extStr.isEmpty()) {
+            for (String e : extStr.split(",")) {
+                String trimmed = e.trim();
+                if (!trimmed.isEmpty()) {
+                    extensions.add(trimmed);
+                }
+            }
+        }
+        boolean indicator = false;
+        String indVal = attrs.get("indicator");
+        if (indVal != null) {
+            indicator = "true".equals(indVal) || "1".equals(indVal) || indVal.isEmpty();
+        }
+        return new HTMXNode(
+            attrs.get("src"),
+            extensions,
+            attrs.get("config"),
+            indicator
+        );
+    }
+
+    private HXAttrNode parseHXAttr(Token token) {
+        String val = token.value().trim();
+        String method = "get";
+        if (val.startsWith("htmx-post ")) {
+            method = "post";
+            val = val.substring(10).trim();
+        } else if (val.startsWith("htmx-put ")) {
+            method = "put";
+            val = val.substring(9).trim();
+        } else if (val.startsWith("htmx-delete ")) {
+            method = "delete";
+            val = val.substring(12).trim();
+        } else if (val.startsWith("htmx-patch ")) {
+            method = "patch";
+            val = val.substring(11).trim();
+        } else if (val.startsWith("htmx-get ")) {
+            val = val.substring(9).trim();
+        }
+
+        String urlPath = "";
+        String attrsStr = val;
+
+        if (!val.isEmpty() && (val.charAt(0) == '\'' || val.charAt(0) == '"')) {
+            char quote = val.charAt(0);
+            int end = val.indexOf(quote, 1);
+            if (end != -1) {
+                urlPath = val.substring(1, end);
+                attrsStr = val.substring(end + 1).trim();
+            }
+        } else {
+            String[] parts = val.split("\\s+");
+            if (parts.length > 0) {
+                urlPath = parts[0];
+                if (val.length() > urlPath.length()) {
+                    attrsStr = val.substring(urlPath.length()).trim();
+                } else {
+                    attrsStr = "";
+                }
+            }
+        }
+
+        java.util.Map<String, String> attrs = parseKeyValuePairs(attrsStr);
+        return new HXAttrNode(
+            method,
+            urlPath,
+            attrs.get("target"),
+            attrs.get("swap"),
+            attrs.get("indicator"),
+            attrs.get("trigger")
+        );
+    }
+
+    private AlpineNode parseAlpine(Token token) {
+        String val = token.value().trim();
+        if (val.startsWith("alpinejs")) {
+            val = val.substring(8).trim();
+        } else if (val.startsWith("alpine")) {
+            val = val.substring(6).trim();
+        } else if (val.startsWith("reactive")) {
+            val = val.substring(8).trim();
+        }
+
+        java.util.Map<String, String> attrs = parseKeyValuePairs(val);
+        List<String> plugins = new ArrayList<>();
+        String pluginStr = attrs.get("plugins");
+        if (pluginStr != null && !pluginStr.isEmpty()) {
+            for (String pl : pluginStr.split(",")) {
+                String trimmed = pl.trim();
+                if (!trimmed.isEmpty()) {
+                    plugins.add(trimmed);
+                }
+            }
+        }
+
+        boolean cloak = true;
+        String cVal = attrs.get("cloak");
+        if (cVal != null) {
+            cloak = "true".equals(cVal) || "1".equals(cVal) || cVal.isEmpty();
+        }
+
+        return new AlpineNode(
+            attrs.get("src"),
+            plugins,
+            cloak
+        );
+    }
+
+    private StateNode parseState(Token token) {
+        String val = token.value().trim();
+        if (val.startsWith("alpine-data")) {
+            val = val.substring(11).trim();
+        }
+        java.util.Map<String, String> attrs = parseKeyValuePairs(val);
+        return new StateNode(attrs);
+    }
+
+    private AlpineAttrNode parseAlpineAttr(Token token) {
+        String val = token.value().trim();
+        String[] parts = val.split("\\s+", 2);
+        String dir = parts[0];
+        String expr = "";
+        if (parts.length > 1) {
+            expr = parts[1].trim();
+            if (expr.length() > 1 && ((expr.startsWith("'") && expr.endsWith("'")) || (expr.startsWith("\"") && expr.endsWith("\"")))) {
+                expr = expr.substring(1, expr.length() - 1);
+            }
+        }
+        return new AlpineAttrNode(dir, expr);
+    }
+
+    private java.util.Map<String, String> parseKeyValuePairs(String input) {
+        java.util.Map<String, String> result = new java.util.HashMap<>();
+        int i = 0;
+        while (i < input.length()) {
+            while (i < input.length() && Character.isWhitespace(input.charAt(i))) {
+                i++;
+            }
+            if (i >= input.length()) {
+                break;
+            }
+
+            int eqIdx = input.indexOf('=', i);
+            if (eqIdx == -1) {
+                break;
+            }
+            String key = input.substring(i, eqIdx).trim();
+            i = eqIdx + 1;
+
+            while (i < input.length() && Character.isWhitespace(input.charAt(i))) {
+                i++;
+            }
+            if (i >= input.length()) {
+                break;
+            }
+
+            String val;
+            if (input.charAt(i) == '\'' || input.charAt(i) == '"') {
+                char quote = input.charAt(i);
+                i++;
+                int end = input.indexOf(quote, i);
+                if (end == -1) {
+                    val = input.substring(i);
+                    i = input.length();
+                } else {
+                    val = input.substring(i, end);
+                    i = end + 1;
+                }
+            } else {
+                int start = i;
+                while (i < input.length() && !Character.isWhitespace(input.charAt(i))) {
+                    i++;
+                }
+                val = input.substring(start, i);
+            }
+
+            if (!key.isEmpty()) {
+                result.put(key, val);
+            }
+        }
+        return result;
     }
 
     private static class Cursor {

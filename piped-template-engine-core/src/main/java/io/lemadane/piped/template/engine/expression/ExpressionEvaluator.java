@@ -171,6 +171,16 @@ public final class ExpressionEvaluator {
                   return new BigDecimal(trimmedExpression);
             }
 
+            final var slashIndex = findTopLevelSlash(trimmedExpression);
+            if (slashIndex != -1) {
+                  final var leftExpr = trimmedExpression.substring(0, slashIndex).trim();
+                  if (!leftExpr.isEmpty()) {
+                        final var leftVal = evaluateValue(leftExpr, context);
+                        final var rightVal = evaluateValue(trimmedExpression.substring(slashIndex + 1).trim(), context);
+                        return toBigDecimal(leftVal).divide(toBigDecimal(rightVal), java.math.MathContext.DECIMAL128);
+                  }
+            }
+
             return propertyReader.readPath(trimmedExpression, context);
       }
 
@@ -613,7 +623,7 @@ public final class ExpressionEvaluator {
                         List.copyOf(parts.subList(1, parts.size())));
       }
 
-      private List<String> splitByTopLevelComma(String expression) {
+      public List<String> splitByTopLevelComma(String expression) {
             final var parts = new ArrayList<String>();
             final var currentPart = new StringBuilder();
 
@@ -999,5 +1009,45 @@ public final class ExpressionEvaluator {
                   String left,
                   String operator,
                   String right) {
+      }
+
+      private int findTopLevelSlash(String expression) {
+            boolean insideSingleQuote = false;
+            boolean insideDoubleQuote = false;
+            int parenthesisDepth = 0;
+
+            for (int index = 0; index < expression.length(); index++) {
+                  final var current = expression.charAt(index);
+
+                  if (current == '\'' && !insideDoubleQuote) {
+                        insideSingleQuote = !insideSingleQuote;
+                        continue;
+                  }
+
+                  if (current == '"' && !insideSingleQuote) {
+                        insideDoubleQuote = !insideDoubleQuote;
+                        continue;
+                  }
+
+                  if (insideSingleQuote || insideDoubleQuote) {
+                        continue;
+                  }
+
+                  if (current == '(') {
+                        parenthesisDepth++;
+                        continue;
+                  }
+
+                  if (current == ')') {
+                        parenthesisDepth--;
+                        continue;
+                  }
+
+                  if (parenthesisDepth == 0 && current == '/') {
+                        return index;
+                  }
+            }
+
+            return -1;
       }
 }

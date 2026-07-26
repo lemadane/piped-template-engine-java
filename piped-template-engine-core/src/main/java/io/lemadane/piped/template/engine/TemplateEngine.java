@@ -591,6 +591,423 @@ public final class TemplateEngine {
                 continue;
             }
 
+            if ("minify".equals(source)) {
+                final var minifyBlock = findMinifyBlock(template, closingPipeIndex + 1, endIndex);
+                final var innerHtml = renderRange(
+                        template,
+                        context,
+                        closingPipeIndex + 1,
+                        minifyBlock.bodyEndIndex());
+                output.append(io.lemadane.piped.template.engine.utils.HtmlFormatter.minifyHtml(innerHtml));
+                index = minifyBlock.endEndIndex();
+                continue;
+            }
+
+            if ("/minify".equals(source)) {
+                throw new TemplateSyntaxException(
+                        "Unexpected |/minify| without matching |minify| at index " + index + ".");
+            }
+
+            if ("attempt".equals(source)) {
+                final var attemptBlock = findAttemptBlock(template, closingPipeIndex + 1, endIndex);
+                try {
+                    String attemptHtml = renderRange(
+                            template,
+                            context,
+                            closingPipeIndex + 1,
+                            attemptBlock.attemptBodyEndIndex());
+                    output.append(attemptHtml);
+                } catch (Exception e) {
+                    if (attemptBlock.hasRecover()) {
+                        TemplateContext nextContext = context;
+                        if (attemptBlock.errorVarName() != null && !attemptBlock.errorVarName().isEmpty()) {
+                            String errorMsg = e.getMessage() != null ? e.getMessage() : e.toString();
+                            nextContext = context.with(attemptBlock.errorVarName(), errorMsg);
+                        }
+                        String recoverHtml = renderRange(
+                                template,
+                                nextContext,
+                                attemptBlock.recoverBodyStartIndex(),
+                                attemptBlock.recoverBodyEndIndex());
+                        output.append(recoverHtml);
+                    }
+                }
+                index = attemptBlock.endEndIndex();
+                continue;
+            }
+
+            if (source.startsWith("recover")) {
+                throw new TemplateSyntaxException(
+                        "Unexpected |recover| without matching |attempt| at index " + index + ".");
+            }
+
+            if ("/attempt".equals(source)) {
+                throw new TemplateSyntaxException(
+                        "Unexpected |/attempt| without matching |attempt| at index " + index + ".");
+            }
+
+            if (source.startsWith("macro ")) {
+                final var header = source.substring("macro ".length()).trim();
+                int openParen = header.indexOf('(');
+                int closeParen = header.lastIndexOf(')');
+                if (openParen == -1 || closeParen == -1 || closeParen < openParen) {
+                    throw new TemplateSyntaxException("Invalid macro signature: " + header);
+                }
+                String macroName = header.substring(0, openParen).trim();
+                String paramsStr = header.substring(openParen + 1, closeParen).trim();
+                List<String> parameters = new ArrayList<>();
+                if (!paramsStr.isEmpty()) {
+                    for (String p : paramsStr.split(",")) {
+                        parameters.add(p.trim());
+                    }
+                }
+                final var macroBlock = findMacroBlock(template, closingPipeIndex + 1, endIndex);
+                final int bodyStart = closingPipeIndex + 1;
+                final int bodyEnd = macroBlock.bodyEndIndex();
+                final String templ = template;
+                io.lemadane.piped.template.engine.ast.ASTNode macroBodyNode = new io.lemadane.piped.template.engine.ast.ASTNode() {
+                    @Override
+                    public void render(TemplateContext ctx, java.io.Writer w) throws IOException {
+                        w.write(renderRange(templ, ctx, bodyStart, bodyEnd));
+                    }
+                };
+                io.lemadane.piped.template.engine.ast.MacroNode macroNode = new io.lemadane.piped.template.engine.ast.MacroNode(macroName, parameters, macroBodyNode);
+                context.pushLocal("_macro_" + macroName, macroNode);
+                index = macroBlock.endEndIndex();
+                continue;
+            }
+
+            if ("/macro".equals(source)) {
+                throw new TemplateSyntaxException(
+                        "Unexpected |/macro| without matching |macro| at index " + index + ".");
+            }
+
+            if (source.startsWith("call ")) {
+                final var callHeader = source.substring("call ".length()).trim();
+                int openParen = callHeader.indexOf('(');
+                int closeParen = callHeader.lastIndexOf(')');
+                if (openParen == -1 || closeParen == -1 || closeParen < openParen) {
+                    throw new TemplateSyntaxException("Invalid macro call syntax: " + callHeader);
+                }
+                String macroName = callHeader.substring(0, openParen).trim();
+                String argsStr = callHeader.substring(openParen + 1, closeParen).trim();
+                List<String> argumentExpressions = new ArrayList<>();
+                if (!argsStr.isEmpty()) {
+                    argumentExpressions = expressionEvaluator.splitByTopLevelComma(argsStr);
+                }
+                
+                java.io.StringWriter sw = new java.io.StringWriter();
+                io.lemadane.piped.template.engine.ast.CallMacroNode callNode = new io.lemadane.piped.template.engine.ast.CallMacroNode(macroName, argumentExpressions, expressionEvaluator);
+                try {
+                    callNode.render(context, sw);
+                } catch (IOException e) {
+                    throw new TemplateRenderException("Failed to render macro", e);
+                }
+                output.append(sw.toString());
+                index = closingPipeIndex + 1;
+                continue;
+            }
+
+            if ("separator".equals(source)) {
+                Object eachVal = context.get("each");
+                if (eachVal == null) {
+                    throw new TemplateSyntaxException("Unexpected |separator| outside |each| loop.");
+                }
+                final var separatorBlock = findSeparatorBlock(template, closingPipeIndex + 1, endIndex);
+                if (!isLastEachItem(context)) {
+                    String separatorHtml = renderRange(
+                            template,
+                            context,
+                            closingPipeIndex + 1,
+                            separatorBlock.bodyEndIndex());
+                    output.append(separatorHtml);
+                }
+                index = separatorBlock.endEndIndex();
+                continue;
+            }
+
+            if ("/separator".equals(source)) {
+                throw new TemplateSyntaxException(
+                        "Unexpected |/separator| without matching |separator| at index " + index + ".");
+            }
+
+            if (source.startsWith("field ")) {
+                final var propertyPath = source.substring("field ".length()).trim();
+                java.io.StringWriter sw = new java.io.StringWriter();
+                var fieldNode = new io.lemadane.piped.template.engine.ast.FieldNode(propertyPath, expressionEvaluator);
+                try {
+                    fieldNode.render(context, sw);
+                } catch (IOException e) {
+                    throw new TemplateRenderException("Failed to render field binding", e);
+                }
+                output.append(sw.toString());
+                index = closingPipeIndex + 1;
+                continue;
+            }
+
+            if (source.startsWith("display ")) {
+                final var propertyPath = source.substring("display ".length()).trim();
+                java.io.StringWriter sw = new java.io.StringWriter();
+                var displayNode = new io.lemadane.piped.template.engine.ast.DisplayNode(propertyPath, expressionEvaluator);
+                try {
+                    displayNode.render(context, sw);
+                } catch (IOException e) {
+                    throw new TemplateRenderException("Failed to render display template", e);
+                }
+                output.append(sw.toString());
+                index = closingPipeIndex + 1;
+                continue;
+            }
+
+            if (source.startsWith("editor ")) {
+                final var propertyPath = source.substring("editor ".length()).trim();
+                java.io.StringWriter sw = new java.io.StringWriter();
+                var editorNode = new io.lemadane.piped.template.engine.ast.EditorNode(propertyPath, expressionEvaluator);
+                try {
+                    editorNode.render(context, sw);
+                } catch (IOException e) {
+                    throw new TemplateRenderException("Failed to render editor template", e);
+                }
+                output.append(sw.toString());
+                index = closingPipeIndex + 1;
+                continue;
+            }
+
+            if (source.startsWith("model ")) {
+                index = closingPipeIndex + 1;
+                continue;
+            }
+
+            if (source.startsWith("fragment ")) {
+                final var fragBlock = findFragmentBlock(template, closingPipeIndex + 1, endIndex);
+                String fragHtml = renderRange(
+                        template,
+                        context,
+                        closingPipeIndex + 1,
+                        fragBlock.bodyEndIndex());
+                output.append(fragHtml);
+                index = fragBlock.endEndIndex();
+                continue;
+            }
+
+            if ("/fragment".equals(source)) {
+                throw new TemplateSyntaxException(
+                        "Unexpected |/fragment| without matching |fragment| at index " + index + ".");
+            }
+
+            if ("pwa".equals(source) || source.startsWith("pwa ")) {
+                String val = source.trim();
+                if (val.startsWith("pwa")) {
+                    val = val.substring(3).trim();
+                }
+                java.util.Map<String, String> attrs = parseKeyValuePairs(val);
+                String name = attrs.get("name");
+                if (name == null || name.isEmpty()) {
+                    name = attrs.get("title");
+                }
+                var pwaNode = new io.lemadane.piped.template.engine.ast.PWANode(
+                    name,
+                    attrs.get("manifest"),
+                    attrs.get("theme"),
+                    attrs.get("icon"),
+                    attrs.get("sw"),
+                    attrs.get("statusColor")
+                );
+                java.io.StringWriter sw = new java.io.StringWriter();
+                try {
+                    pwaNode.render(context, sw);
+                } catch (IOException e) {
+                    throw new TemplateRenderException("Failed to render pwa node", e);
+                }
+                output.append(sw.toString());
+                index = closingPipeIndex + 1;
+                continue;
+            }
+
+            if ("htmx".equals(source) || source.startsWith("htmx ")) {
+                String val = source.trim();
+                if (val.startsWith("htmx")) {
+                    val = val.substring(4).trim();
+                }
+                java.util.Map<String, String> attrs = parseKeyValuePairs(val);
+                List<String> extensions = new ArrayList<>();
+                String extStr = attrs.get("ext");
+                if (extStr != null && !extStr.isEmpty()) {
+                    for (String e : extStr.split(",")) {
+                        String trimmed = e.trim();
+                        if (!trimmed.isEmpty()) {
+                            extensions.add(trimmed);
+                        }
+                    }
+                }
+                boolean indicator = false;
+                String indVal = attrs.get("indicator");
+                if (indVal != null) {
+                    indicator = "true".equals(indVal) || "1".equals(indVal) || indVal.isEmpty();
+                }
+                var htmxNode = new io.lemadane.piped.template.engine.ast.HTMXNode(
+                    attrs.get("src"),
+                    extensions,
+                    attrs.get("config"),
+                    indicator
+                );
+                java.io.StringWriter sw = new java.io.StringWriter();
+                try {
+                    htmxNode.render(context, sw);
+                } catch (IOException e) {
+                    throw new TemplateRenderException("Failed to render htmx node", e);
+                }
+                output.append(sw.toString());
+                index = closingPipeIndex + 1;
+                continue;
+            }
+
+            if (source.startsWith("htmx-get ") || source.startsWith("htmx-post ") || source.startsWith("htmx-put ") || source.startsWith("htmx-delete ") || source.startsWith("htmx-patch ")) {
+                String val = source.trim();
+                String method = "get";
+                if (val.startsWith("htmx-post ")) {
+                    method = "post";
+                    val = val.substring(10).trim();
+                } else if (val.startsWith("htmx-put ")) {
+                    method = "put";
+                    val = val.substring(9).trim();
+                } else if (val.startsWith("htmx-delete ")) {
+                    method = "delete";
+                    val = val.substring(12).trim();
+                } else if (val.startsWith("htmx-patch ")) {
+                    method = "patch";
+                    val = val.substring(11).trim();
+                } else if (val.startsWith("htmx-get ")) {
+                    val = val.substring(9).trim();
+                }
+
+                String urlPath = "";
+                String attrsStr = val;
+
+                if (!val.isEmpty() && (val.charAt(0) == '\'' || val.charAt(0) == '"')) {
+                    char quote = val.charAt(0);
+                    int end = val.indexOf(quote, 1);
+                    if (end != -1) {
+                        urlPath = val.substring(1, end);
+                        attrsStr = val.substring(end + 1).trim();
+                    }
+                } else {
+                    String[] parts = val.split("\\s+");
+                    if (parts.length > 0) {
+                        urlPath = parts[0];
+                        if (val.length() > urlPath.length()) {
+                            attrsStr = val.substring(urlPath.length()).trim();
+                        } else {
+                            attrsStr = "";
+                        }
+                    }
+                }
+
+                java.util.Map<String, String> attrs = parseKeyValuePairs(attrsStr);
+                var hxAttrNode = new io.lemadane.piped.template.engine.ast.HXAttrNode(
+                    method,
+                    urlPath,
+                    attrs.get("target"),
+                    attrs.get("swap"),
+                    attrs.get("indicator"),
+                    attrs.get("trigger")
+                );
+                java.io.StringWriter sw = new java.io.StringWriter();
+                try {
+                    hxAttrNode.render(context, sw);
+                } catch (IOException e) {
+                    throw new TemplateRenderException("Failed to render htmx attr node", e);
+                }
+                output.append(sw.toString());
+                index = closingPipeIndex + 1;
+                continue;
+            }
+
+            if ("alpine".equals(source) || source.startsWith("alpine ") || "alpinejs".equals(source) || source.startsWith("alpinejs ") || "reactive".equals(source) || source.startsWith("reactive ")) {
+                String val = source.trim();
+                if (val.startsWith("alpinejs")) {
+                    val = val.substring(8).trim();
+                } else if (val.startsWith("alpine")) {
+                    val = val.substring(6).trim();
+                } else if (val.startsWith("reactive")) {
+                    val = val.substring(8).trim();
+                }
+
+                java.util.Map<String, String> attrs = parseKeyValuePairs(val);
+                List<String> plugins = new ArrayList<>();
+                String pluginStr = attrs.get("plugins");
+                if (pluginStr != null && !pluginStr.isEmpty()) {
+                    for (String pl : pluginStr.split(",")) {
+                        String trimmed = pl.trim();
+                        if (!trimmed.isEmpty()) {
+                            plugins.add(trimmed);
+                        }
+                    }
+                }
+
+                boolean cloak = true;
+                String cVal = attrs.get("cloak");
+                if (cVal != null) {
+                    cloak = "true".equals(cVal) || "1".equals(cVal) || cVal.isEmpty();
+                }
+
+                var alpineNode = new io.lemadane.piped.template.engine.ast.AlpineNode(
+                    attrs.get("src"),
+                    plugins,
+                    cloak
+                );
+                java.io.StringWriter sw = new java.io.StringWriter();
+                try {
+                    alpineNode.render(context, sw);
+                } catch (IOException e) {
+                    throw new TemplateRenderException("Failed to render alpine node", e);
+                }
+                output.append(sw.toString());
+                index = closingPipeIndex + 1;
+                continue;
+            }
+
+            if ("alpine-data".equals(source) || source.startsWith("alpine-data ")) {
+                String val = source.trim();
+                if (val.startsWith("alpine-data")) {
+                    val = val.substring(11).trim();
+                }
+                java.util.Map<String, String> attrs = parseKeyValuePairs(val);
+                var stateNode = new io.lemadane.piped.template.engine.ast.StateNode(attrs);
+                java.io.StringWriter sw = new java.io.StringWriter();
+                try {
+                    stateNode.render(context, sw);
+                } catch (IOException e) {
+                    throw new TemplateRenderException("Failed to render state node", e);
+                }
+                output.append(sw.toString());
+                index = closingPipeIndex + 1;
+                continue;
+            }
+
+            if (source.startsWith("alpine-")) {
+                String val = source.trim();
+                String[] parts = val.split("\\s+", 2);
+                String dir = parts[0];
+                String expr = "";
+                if (parts.length > 1) {
+                    expr = parts[1].trim();
+                    if (expr.length() > 1 && ((expr.startsWith("'") && expr.endsWith("'")) || (expr.startsWith("\"") && expr.endsWith("\"")))) {
+                        expr = expr.substring(1, expr.length() - 1);
+                    }
+                }
+                var alpineAttrNode = new io.lemadane.piped.template.engine.ast.AlpineAttrNode(dir, expr);
+                java.io.StringWriter sw = new java.io.StringWriter();
+                try {
+                    alpineAttrNode.render(context, sw);
+                } catch (IOException e) {
+                    throw new TemplateRenderException("Failed to render alpine attr node", e);
+                }
+                output.append(sw.toString());
+                index = closingPipeIndex + 1;
+                continue;
+            }
+
             if (source.startsWith("layout ")) {
                 throw new TemplateSyntaxException(
                         "|layout| must be the first directive in a template.");
@@ -2230,5 +2647,309 @@ public final class TemplateEngine {
         }
 
         return index;
+    }
+
+    private record MinifyBlock(
+            int bodyStartIndex,
+            int bodyEndIndex,
+            int endStartIndex,
+            int endEndIndex) {
+    }
+
+    private MinifyBlock findMinifyBlock(String template, int searchStartIndex, int endIndex) {
+        int depth = 1;
+        int index = searchStartIndex;
+        while (index < endIndex) {
+            final var openingPipeIndex = template.indexOf('|', index);
+            if (openingPipeIndex == -1 || openingPipeIndex >= endIndex) {
+                break;
+            }
+            if (isCommentStart(template, openingPipeIndex)) {
+                index = findCommentEndIndex(template, openingPipeIndex);
+                continue;
+            }
+            final var closingPipeIndex = template.indexOf('|', openingPipeIndex + 1);
+            if (closingPipeIndex == -1 || closingPipeIndex >= endIndex) {
+                throw new TemplateSyntaxException(
+                        "Missing closing pipe for expression starting at index " + openingPipeIndex + ".");
+            }
+            final var source = template.substring(openingPipeIndex + 1, closingPipeIndex).trim();
+            if ("minify".equals(source)) {
+                depth++;
+            } else if ("/minify".equals(source)) {
+                depth--;
+                if (depth == 0) {
+                    return new MinifyBlock(
+                            searchStartIndex,
+                            openingPipeIndex,
+                            openingPipeIndex,
+                            closingPipeIndex + 1);
+                }
+            }
+            index = closingPipeIndex + 1;
+        }
+        throw new TemplateSyntaxException("Missing closing |/minify|.");
+    }
+
+    private record AttemptBlock(
+            int attemptBodyEndIndex,
+            int recoverBodyStartIndex,
+            int recoverBodyEndIndex,
+            String errorVarName,
+            int endStartIndex,
+            int endEndIndex) {
+        public boolean hasRecover() {
+            return recoverBodyStartIndex != -1;
+        }
+    }
+
+    private AttemptBlock findAttemptBlock(String template, int searchStartIndex, int endIndex) {
+        int depth = 1;
+        int index = searchStartIndex;
+
+        int recoverStartIndex = -1;
+        int recoverEndIndex = -1;
+        String errorVarName = null;
+
+        while (index < endIndex) {
+            final var openingPipeIndex = template.indexOf('|', index);
+            if (openingPipeIndex == -1 || openingPipeIndex >= endIndex) {
+                break;
+            }
+            if (isCommentStart(template, openingPipeIndex)) {
+                index = findCommentEndIndex(template, openingPipeIndex);
+                continue;
+            }
+            final var closingPipeIndex = template.indexOf('|', openingPipeIndex + 1);
+            if (closingPipeIndex == -1 || closingPipeIndex >= endIndex) {
+                throw new TemplateSyntaxException(
+                        "Missing closing pipe for expression starting at index " + openingPipeIndex + ".");
+            }
+            final var source = template.substring(openingPipeIndex + 1, closingPipeIndex).trim();
+            if ("attempt".equals(source)) {
+                depth++;
+            } else if ("/attempt".equals(source)) {
+                depth--;
+                if (depth == 0) {
+                    int attemptBodyEnd = recoverStartIndex != -1 ? recoverStartIndex : openingPipeIndex;
+                    int recoverBodyStart = recoverEndIndex != -1 ? recoverEndIndex : -1;
+                    int recoverBodyEnd = recoverStartIndex != -1 ? openingPipeIndex : -1;
+                    return new AttemptBlock(
+                            attemptBodyEnd,
+                            recoverBodyStart,
+                            recoverBodyEnd,
+                            errorVarName,
+                            openingPipeIndex,
+                            closingPipeIndex + 1);
+                }
+            } else if (source.startsWith("recover") && depth == 1) {
+                if (recoverStartIndex != -1) {
+                    throw new TemplateSyntaxException("Only one |recover| is allowed inside an |attempt| block.");
+                }
+                recoverStartIndex = openingPipeIndex;
+                recoverEndIndex = closingPipeIndex + 1;
+                if (source.startsWith("recover as ")) {
+                    errorVarName = source.substring("recover as ".length()).trim();
+                } else if (source.equals("recover")) {
+                    errorVarName = null;
+                } else {
+                    throw new TemplateSyntaxException("Invalid recover syntax: " + source);
+                }
+            }
+            index = closingPipeIndex + 1;
+        }
+        throw new TemplateSyntaxException("Missing closing |/attempt|.");
+    }
+
+    private record MacroBlock(
+            int bodyStartIndex,
+            int bodyEndIndex,
+            int endStartIndex,
+            int endEndIndex) {
+    }
+
+    private MacroBlock findMacroBlock(String template, int searchStartIndex, int endIndex) {
+        int depth = 1;
+        int index = searchStartIndex;
+        while (index < endIndex) {
+            final var openingPipeIndex = template.indexOf('|', index);
+            if (openingPipeIndex == -1 || openingPipeIndex >= endIndex) {
+                break;
+            }
+            if (isCommentStart(template, openingPipeIndex)) {
+                index = findCommentEndIndex(template, openingPipeIndex);
+                continue;
+            }
+            final var closingPipeIndex = template.indexOf('|', openingPipeIndex + 1);
+            if (closingPipeIndex == -1 || closingPipeIndex >= endIndex) {
+                throw new TemplateSyntaxException(
+                        "Missing closing pipe for expression starting at index " + openingPipeIndex + ".");
+            }
+            final var source = template.substring(openingPipeIndex + 1, closingPipeIndex).trim();
+            if (source.startsWith("macro ")) {
+                depth++;
+            } else if ("/macro".equals(source)) {
+                depth--;
+                if (depth == 0) {
+                    return new MacroBlock(
+                            searchStartIndex,
+                            openingPipeIndex,
+                            openingPipeIndex,
+                            closingPipeIndex + 1);
+                }
+            }
+            index = closingPipeIndex + 1;
+        }
+        throw new TemplateSyntaxException("Missing closing |/macro|.");
+    }
+
+    private record SeparatorBlock(
+            int bodyStartIndex,
+            int bodyEndIndex,
+            int endStartIndex,
+            int endEndIndex) {
+    }
+
+    private SeparatorBlock findSeparatorBlock(String template, int searchStartIndex, int endIndex) {
+        int depth = 1;
+        int index = searchStartIndex;
+        while (index < endIndex) {
+            final var openingPipeIndex = template.indexOf('|', index);
+            if (openingPipeIndex == -1 || openingPipeIndex >= endIndex) {
+                break;
+            }
+            if (isCommentStart(template, openingPipeIndex)) {
+                index = findCommentEndIndex(template, openingPipeIndex);
+                continue;
+            }
+            final var closingPipeIndex = template.indexOf('|', openingPipeIndex + 1);
+            if (closingPipeIndex == -1 || closingPipeIndex >= endIndex) {
+                throw new TemplateSyntaxException(
+                        "Missing closing pipe for expression starting at index " + openingPipeIndex + ".");
+            }
+            final var source = template.substring(openingPipeIndex + 1, closingPipeIndex).trim();
+            if ("separator".equals(source)) {
+                depth++;
+            } else if ("/separator".equals(source)) {
+                depth--;
+                if (depth == 0) {
+                    return new SeparatorBlock(
+                            searchStartIndex,
+                            openingPipeIndex,
+                            openingPipeIndex,
+                            closingPipeIndex + 1);
+                }
+            }
+            index = closingPipeIndex + 1;
+        }
+        throw new TemplateSyntaxException("Missing closing |/separator|.");
+    }
+
+    private boolean isLastEachItem(TemplateContext context) {
+        Object eachVal = context.get("each");
+        if (eachVal instanceof io.lemadane.piped.template.engine.metadata.EachMetadata meta) {
+            return meta.last();
+        }
+        if (eachVal instanceof Map<?, ?> map) {
+            Object lastVal = map.get("last");
+            if (lastVal instanceof Boolean b) {
+                return b;
+            }
+        }
+        return false;
+    }
+
+    private record FragmentBlock(
+            int bodyStartIndex,
+            int bodyEndIndex,
+            int endStartIndex,
+            int endEndIndex) {
+    }
+
+    private FragmentBlock findFragmentBlock(String template, int searchStartIndex, int endIndex) {
+        int depth = 1;
+        int index = searchStartIndex;
+        while (index < endIndex) {
+            final var openingPipeIndex = template.indexOf('|', index);
+            if (openingPipeIndex == -1 || openingPipeIndex >= endIndex) {
+                break;
+            }
+            if (isCommentStart(template, openingPipeIndex)) {
+                index = findCommentEndIndex(template, openingPipeIndex);
+                continue;
+            }
+            final var closingPipeIndex = template.indexOf('|', openingPipeIndex + 1);
+            if (closingPipeIndex == -1 || closingPipeIndex >= endIndex) {
+                throw new TemplateSyntaxException(
+                        "Missing closing pipe for expression starting at index " + openingPipeIndex + ".");
+            }
+            final var source = template.substring(openingPipeIndex + 1, closingPipeIndex).trim();
+            if (source.startsWith("fragment ")) {
+                depth++;
+            } else if ("/fragment".equals(source)) {
+                depth--;
+                if (depth == 0) {
+                    return new FragmentBlock(
+                            searchStartIndex,
+                            openingPipeIndex,
+                            openingPipeIndex,
+                            closingPipeIndex + 1);
+                }
+            }
+            index = closingPipeIndex + 1;
+        }
+        throw new TemplateSyntaxException("Missing closing |/fragment|.");
+    }
+
+    private java.util.Map<String, String> parseKeyValuePairs(String input) {
+        java.util.Map<String, String> result = new java.util.HashMap<>();
+        int i = 0;
+        while (i < input.length()) {
+            while (i < input.length() && Character.isWhitespace(input.charAt(i))) {
+                i++;
+            }
+            if (i >= input.length()) {
+                break;
+            }
+
+            int eqIdx = input.indexOf('=', i);
+            if (eqIdx == -1) {
+                break;
+            }
+            String key = input.substring(i, eqIdx).trim();
+            i = eqIdx + 1;
+
+            while (i < input.length() && Character.isWhitespace(input.charAt(i))) {
+                i++;
+            }
+            if (i >= input.length()) {
+                break;
+            }
+
+            String val;
+            if (input.charAt(i) == '\'' || input.charAt(i) == '"') {
+                char quote = input.charAt(i);
+                i++;
+                int end = input.indexOf(quote, i);
+                if (end == -1) {
+                    val = input.substring(i);
+                    i = input.length();
+                } else {
+                    val = input.substring(i, end);
+                    i = end + 1;
+                }
+            } else {
+                int start = i;
+                while (i < input.length() && !Character.isWhitespace(input.charAt(i))) {
+                    i++;
+                }
+                val = input.substring(start, i);
+            }
+
+            if (!key.isEmpty()) {
+                result.put(key, val);
+            }
+        }
+        return result;
     }
 }

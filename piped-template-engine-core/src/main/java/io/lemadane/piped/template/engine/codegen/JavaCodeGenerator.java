@@ -109,6 +109,57 @@ public final class JavaCodeGenerator {
             sb.append(indent).append("        writer = prevWriter;\n");
             sb.append(indent).append("    }\n");
             sb.append(indent).append("}\n");
+        } else if (node instanceof io.lemadane.piped.template.engine.ast.PWANode pwaNode) {
+            sb.append(indent).append("new io.lemadane.piped.template.engine.ast.PWANode(")
+                    .append(escapeStringLiteral(pwaNode.getName())).append(", ")
+                    .append(escapeStringLiteral(pwaNode.getManifest())).append(", ")
+                    .append(escapeStringLiteral(pwaNode.getTheme())).append(", ")
+                    .append(escapeStringLiteral(pwaNode.getIcon())).append(", ")
+                    .append(escapeStringLiteral(pwaNode.getSW())).append(", ")
+                    .append(escapeStringLiteral(pwaNode.getStatusColor())).append(").render(context, writer);\n");
+        } else if (node instanceof io.lemadane.piped.template.engine.ast.HTMXNode htmxNode) {
+            sb.append(indent).append("new io.lemadane.piped.template.engine.ast.HTMXNode(")
+                    .append(escapeStringLiteral(htmxNode.getSrc())).append(", ")
+                    .append("java.util.List.of(");
+            for (int i = 0; i < htmxNode.getExtensions().size(); i++) {
+                if (i > 0) sb.append(", ");
+                sb.append(escapeStringLiteral(htmxNode.getExtensions().get(i)));
+            }
+            sb.append("), ")
+                    .append(escapeStringLiteral(htmxNode.getConfig())).append(", ")
+                    .append(htmxNode.isIndicator()).append(").render(context, writer);\n");
+        } else if (node instanceof io.lemadane.piped.template.engine.ast.HXAttrNode hxAttrNode) {
+            sb.append(indent).append("new io.lemadane.piped.template.engine.ast.HXAttrNode(")
+                    .append(escapeStringLiteral(hxAttrNode.getMethod())).append(", ")
+                    .append(escapeStringLiteral(hxAttrNode.getUrl())).append(", ")
+                    .append(escapeStringLiteral(hxAttrNode.getTarget())).append(", ")
+                    .append(escapeStringLiteral(hxAttrNode.getSwap())).append(", ")
+                    .append(escapeStringLiteral(hxAttrNode.getIndicator())).append(", ")
+                    .append(escapeStringLiteral(hxAttrNode.getTrigger())).append(").render(context, writer);\n");
+        } else if (node instanceof io.lemadane.piped.template.engine.ast.AlpineNode alpineNode) {
+            sb.append(indent).append("new io.lemadane.piped.template.engine.ast.AlpineNode(")
+                    .append(escapeStringLiteral(alpineNode.getSrc())).append(", ")
+                    .append("java.util.List.of(");
+            for (int i = 0; i < alpineNode.getPlugins().size(); i++) {
+                if (i > 0) sb.append(", ");
+                sb.append(escapeStringLiteral(alpineNode.getPlugins().get(i)));
+            }
+            sb.append("), ")
+                    .append(alpineNode.isCloak()).append(").render(context, writer);\n");
+        } else if (node instanceof io.lemadane.piped.template.engine.ast.StateNode stateNode) {
+            sb.append(indent).append("{\n");
+            sb.append(indent).append("    java.util.Map<String, String> stateMap = new java.util.HashMap<>();\n");
+            for (var entry : stateNode.getStateMap().entrySet()) {
+                sb.append(indent).append("    stateMap.put(")
+                        .append(escapeStringLiteral(entry.getKey())).append(", ")
+                        .append(escapeStringLiteral(entry.getValue())).append(");\n");
+            }
+            sb.append(indent).append("    new io.lemadane.piped.template.engine.ast.StateNode(stateMap).render(context, writer);\n");
+            sb.append(indent).append("}\n");
+        } else if (node instanceof io.lemadane.piped.template.engine.ast.AlpineAttrNode alpineAttrNode) {
+            sb.append(indent).append("new io.lemadane.piped.template.engine.ast.AlpineAttrNode(")
+                    .append(escapeStringLiteral(alpineAttrNode.getDirective())).append(", ")
+                    .append(escapeStringLiteral(alpineAttrNode.getValue())).append(").render(context, writer);\n");
         }
     }
 

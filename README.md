@@ -455,3 +455,60 @@ Wrap error-prone layout widgets, database-backed components, or custom scripts i
     </div>
 |/attempt|
 ```
+
+---
+
+### 28. Progressive Web App (PWA) Meta & Service Worker Tag
+Abstract mobile viewports, theme colors, iOS app capability, icons, web app manifest links, and service worker registration into a single inline tag:
+
+```html
+<head>
+    <title>|title ?? 'My App'|</title>
+    |pwa name='TaskMaster' theme='#4f46e5' icon='/icon-192.png' manifest='/manifest.json' sw='/sw.js'|
+</head>
+```
+
+---
+
+### 29. HTMX Head & Element Attribute Tags
+Abstract HTMX library scripts, extension plugins, indicator CSS rules, and HTMX element action attributes into single inline tags.
+
+#### A. HTMX Head Setup Tag (`|htmx ...|`)
+```html
+<head>
+    <!-- Loads HTMX library, json-enc & sse extensions, and default loading indicator CSS -->
+    |htmx src='/js/htmx.min.js' ext='json-enc,sse' indicator=true|
+</head>
+```
+
+#### B. HTMX Element Action Shorthand Tag
+Write HTMX attribute bindings using `|htmx-get ...|`, `|htmx-post ...|`, `|htmx-put ...|`, `|htmx-delete ...|`, `|htmx-patch ...|`:
+```html
+<button |htmx-get '/api/tasks' target='#task-list' swap='outerHTML' indicator='#spinner'|>
+    Refresh Tasks
+</button>
+```
+
+---
+
+### 30. Alpine.js Integration & Reactive State Tags
+Abstract Alpine.js core script tags, plugin CDN references, `x-cloak` CSS rules, and reactive component state declarations into single inline tags.
+
+#### A. Alpine.js Head Setup Tag (`|alpine ...|` / `|reactive ...|` / `|alpinejs ...|`)
+```html
+<head>
+    <!-- Loads Alpine.js core, collapse & focus plugins, and x-cloak CSS rules -->
+    |reactive plugins='collapse,focus' cloak=true|
+</head>
+```
+
+#### B. Alpine.js Reactive Component State Tag (`|alpine-data ...|`)
+Use `|alpine-data ...|` to declare `x-data` reactive state:
+```html
+<div |alpine-data open=false count=0 tab='home'|>
+    <button @click="open = !open">Toggle Menu</button>
+    <div |alpine-show 'open'| |alpine-cloak|>
+        <p>Active Tab: <span x-text="tab"></span></p>
+    </div>
+</div>
+```

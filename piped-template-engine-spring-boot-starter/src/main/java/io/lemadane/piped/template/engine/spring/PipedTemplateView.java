@@ -41,6 +41,25 @@ public class PipedTemplateView extends AbstractTemplateView {
         // Call the templateEngine render method directly to support layouts and section yields
         String html = templateEngine.render(viewName, model);
 
+        // Apply HTMX metadata response headers
+        if (metadata.containsKey("hxTrigger")) {
+            response.setHeader("HX-Trigger", String.valueOf(metadata.get("hxTrigger")));
+        }
+        if (metadata.containsKey("hxRedirect")) {
+            response.setHeader("HX-Redirect", String.valueOf(metadata.get("hxRedirect")));
+        }
+        if (metadata.containsKey("hxPushUrl")) {
+            response.setHeader("HX-Push-Url", String.valueOf(metadata.get("hxPushUrl")));
+        }
+        if (metadata.containsKey("hxRefresh")) {
+            Object refresh = metadata.get("hxRefresh");
+            if (refresh instanceof Boolean b && b) {
+                response.setHeader("HX-Refresh", "true");
+            } else {
+                response.setHeader("HX-Refresh", String.valueOf(refresh));
+            }
+        }
+
         response.setContentType(getContentType());
         response.getWriter().write(html);
     }

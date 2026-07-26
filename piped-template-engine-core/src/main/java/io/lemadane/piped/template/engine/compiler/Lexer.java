@@ -129,6 +129,18 @@ public final class Lexer {
             return TokenType.RECOVER;
         } else if ("/attempt".equals(content)) {
             return TokenType.END_ATTEMPT;
+        } else if ("pwa".equals(content) || content.startsWith("pwa ")) {
+            return TokenType.PWA;
+        } else if ("htmx".equals(content) || content.startsWith("htmx ")) {
+            return TokenType.HTMX;
+        } else if (content.startsWith("htmx-get ") || content.startsWith("htmx-post ") || content.startsWith("htmx-put ") || content.startsWith("htmx-delete ") || content.startsWith("htmx-patch ")) {
+            return TokenType.HX_ATTR;
+        } else if ("alpine".equals(content) || content.startsWith("alpine ") || "alpinejs".equals(content) || content.startsWith("alpinejs ") || "reactive".equals(content) || content.startsWith("reactive ")) {
+            return TokenType.ALPINE;
+        } else if ("alpine-data".equals(content) || content.startsWith("alpine-data ")) {
+            return TokenType.STATE;
+        } else if (content.startsWith("alpine-")) {
+            return TokenType.ALPINE_ATTR;
         }
         return TokenType.EXPRESSION;
     }

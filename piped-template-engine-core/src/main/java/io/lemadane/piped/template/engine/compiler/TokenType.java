@@ -40,5 +40,11 @@ public enum TokenType {
     PAGE,
     ATTEMPT,
     RECOVER,
-    END_ATTEMPT
+    END_ATTEMPT,
+    PWA,
+    HTMX,
+    HX_ATTR,
+    ALPINE,
+    STATE,
+    ALPINE_ATTR
 }

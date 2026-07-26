@@ -6,6 +6,7 @@ dependencies {
     compileOnly 'jakarta.servlet:jakarta.servlet-api:6.0.0'
 
     testImplementation 'org.junit.jupiter:junit-jupiter:5.11.4'
+    testImplementation 'jakarta.servlet:jakarta.servlet-api:6.0.0'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
     testImplementation 'org.springframework.boot:spring-boot-starter-test:3.3.4'
 }
