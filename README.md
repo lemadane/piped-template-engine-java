@@ -481,11 +481,32 @@ Abstract HTMX library scripts, extension plugins, indicator CSS rules, and HTMX 
 </head>
 ```
 
-#### B. HTMX Element Action Shorthand Tag
+#### B. HTMX Element Action Shorthand Tags
 Write HTMX attribute bindings using `|htmx-get ...|`, `|htmx-post ...|`, `|htmx-put ...|`, `|htmx-delete ...|`, `|htmx-patch ...|`:
 ```html
+<!-- GET request -->
 <button |htmx-get '/api/tasks' target='#task-list' swap='outerHTML' indicator='#spinner'|>
     Refresh Tasks
+</button>
+
+<!-- POST request -->
+<form |htmx-post '/api/tasks/create' target='#task-list' swap='beforeend'|>
+    <input name="title" />
+</form>
+
+<!-- PUT request -->
+<button |htmx-put '/api/tasks/1' target='#task-1' swap='outerHTML'|>
+    Save Task
+</button>
+
+<!-- DELETE request -->
+<button |htmx-delete '/api/tasks/1' target='#task-1' swap='delete'|>
+    Delete Task
+</button>
+
+<!-- PATCH request -->
+<button |htmx-patch '/api/tasks/1/status' target='#task-1' swap='outerHTML'|>
+    Toggle Status
 </button>
 ```
 
@@ -494,11 +515,11 @@ Write HTMX attribute bindings using `|htmx-get ...|`, `|htmx-post ...|`, `|htmx-
 ### 30. Alpine.js Integration & Reactive State Tags
 Abstract Alpine.js core script tags, plugin CDN references, `x-cloak` CSS rules, and reactive component state declarations into single inline tags.
 
-#### A. Alpine.js Head Setup Tag (`|alpine ...|` / `|reactive ...|` / `|alpinejs ...|`)
+#### A. Alpine.js Head Setup Tag (`|alpine ...|`)
 ```html
 <head>
     <!-- Loads Alpine.js core, collapse & focus plugins, and x-cloak CSS rules -->
-    |reactive plugins='collapse,focus' cloak=true|
+    |alpine plugins='collapse,focus' cloak=true|
 </head>
 ```
 
@@ -511,4 +532,27 @@ Use `|alpine-data ...|` to declare `x-data` reactive state:
         <p>Active Tab: <span x-text="tab"></span></p>
     </div>
 </div>
+```
+
+#### C. Other Alpine Directives
+Write any Alpine.js directive attribute shorthand using `|alpine-<directive> ...|`:
+```html
+<!-- x-show shorthand -->
+<div |alpine-show "open"|>Visible if open</div>
+
+<!-- x-text shorthand -->
+<span |alpine-text "username"|></span>
+
+<!-- x-html shorthand -->
+<div |alpine-html "renderedMarkdown"|></div>
+
+<!-- x-model shorthand -->
+<input |alpine-model "searchQuery"| />
+
+<!-- x-transition shorthand -->
+<div |alpine-show "open"| |alpine-transition|>Fades in/out</div>
+
+<!-- x-cloak shorthand -->
+<div |alpine-cloak|>Hidden until Alpine compiles</div>
+```
 ```

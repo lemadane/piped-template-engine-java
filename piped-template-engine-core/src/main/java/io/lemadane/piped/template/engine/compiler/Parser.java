@@ -397,12 +397,8 @@ public final class Parser {
 
     private AlpineNode parseAlpine(Token token) {
         String val = token.value().trim();
-        if (val.startsWith("alpinejs")) {
-            val = val.substring(8).trim();
-        } else if (val.startsWith("alpine")) {
+        if (val.startsWith("alpine")) {
             val = val.substring(6).trim();
-        } else if (val.startsWith("reactive")) {
-            val = val.substring(8).trim();
         }
 
         java.util.Map<String, String> attrs = parseKeyValuePairs(val);

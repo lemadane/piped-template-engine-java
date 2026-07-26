@@ -135,7 +135,7 @@ public final class Lexer {
             return TokenType.HTMX;
         } else if (content.startsWith("htmx-get ") || content.startsWith("htmx-post ") || content.startsWith("htmx-put ") || content.startsWith("htmx-delete ") || content.startsWith("htmx-patch ")) {
             return TokenType.HX_ATTR;
-        } else if ("alpine".equals(content) || content.startsWith("alpine ") || "alpinejs".equals(content) || content.startsWith("alpinejs ") || "reactive".equals(content) || content.startsWith("reactive ")) {
+        } else if ("alpine".equals(content) || content.startsWith("alpine ")) {
             return TokenType.ALPINE;
         } else if ("alpine-data".equals(content) || content.startsWith("alpine-data ")) {
             return TokenType.STATE;

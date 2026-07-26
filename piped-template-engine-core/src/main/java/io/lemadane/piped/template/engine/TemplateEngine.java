@@ -923,14 +923,10 @@ public final class TemplateEngine {
                 continue;
             }
 
-            if ("alpine".equals(source) || source.startsWith("alpine ") || "alpinejs".equals(source) || source.startsWith("alpinejs ") || "reactive".equals(source) || source.startsWith("reactive ")) {
+            if ("alpine".equals(source) || source.startsWith("alpine ")) {
                 String val = source.trim();
-                if (val.startsWith("alpinejs")) {
-                    val = val.substring(8).trim();
-                } else if (val.startsWith("alpine")) {
+                if (val.startsWith("alpine")) {
                     val = val.substring(6).trim();
-                } else if (val.startsWith("reactive")) {
-                    val = val.substring(8).trim();
                 }
 
                 java.util.Map<String, String> attrs = parseKeyValuePairs(val);

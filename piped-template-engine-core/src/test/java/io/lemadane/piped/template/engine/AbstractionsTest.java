@@ -75,7 +75,7 @@ class AbstractionsTest {
     @Test
     @DisplayName("Renders AlpineJS settings, plugins, state and attributes correctly")
     void testAlpineTags() throws Exception {
-        String headTemplate = "|reactive plugins='collapse,focus' cloak=true|";
+        String headTemplate = "|alpine plugins='collapse,focus' cloak=true|";
 
         // Interpreter
         String headInterp = engine.renderString(headTemplate, Map.of());
