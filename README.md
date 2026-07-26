@@ -554,5 +554,26 @@ Write any Alpine.js directive attribute shorthand using `|alpine-<directive> ...
 
 <!-- x-cloak shorthand -->
 <div |alpine-cloak|>Hidden until Alpine compiles</div>
-```
+
+<!-- x-for shorthand -->
+<template |alpine-for "item in items"|>
+    <li x-text="item"></li>
+</template>
+
+<!-- x-if shorthand -->
+<template |alpine-if "open"|>
+    <div>Conditional content</div>
+</template>
+
+<!-- x-effect shorthand -->
+<div |alpine-effect "console.log(count)"|></div>
+
+<!-- x-ref shorthand -->
+<button |alpine-ref "submitButton"|>Submit</button>
+
+<!-- x-ignore shorthand -->
+<div |alpine-ignore|>Ignored by Alpine</div>
+
+<!-- x-init shorthand -->
+<div |alpine-init "console.log('Initialized')"|></div>
 ```
