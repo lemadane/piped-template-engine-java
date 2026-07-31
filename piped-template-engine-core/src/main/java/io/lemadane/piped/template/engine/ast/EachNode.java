@@ -77,10 +77,16 @@ public final class EachNode implements ASTNode {
                 scope.put("each", loopMeta);
 
                 TemplateContext subContext = context.subContext(scope);
-                bodyBlock.render(subContext, writer);
+                try {
+                    bodyBlock.render(subContext, writer);
 
-                if (separatorNode != null && !isLast) {
-                    separatorNode.render(subContext, writer);
+                    if (separatorNode != null && !isLast) {
+                        separatorNode.render(subContext, writer);
+                    }
+                } catch (io.lemadane.piped.template.engine.exceptions.LoopContinueException e) {
+                    // Continue next iteration
+                } catch (io.lemadane.piped.template.engine.exceptions.LoopBreakException e) {
+                    break;
                 }
             }
         } else if (elseBlock != null) {

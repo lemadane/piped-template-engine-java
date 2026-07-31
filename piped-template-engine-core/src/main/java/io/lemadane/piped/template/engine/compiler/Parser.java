@@ -12,10 +12,24 @@ public final class Parser {
     private final ExpressionEvaluator evaluator = new ExpressionEvaluator();
     private final ThreadLocal<java.util.Map<String, Object>> threadLocalMetadata = ThreadLocal.withInitial(java.util.HashMap::new);
 
+    private int loopDepth = 0;
+
     public CompiledTemplate parse(List<Token> tokens) {
         Cursor cursor = new Cursor(tokens);
         threadLocalMetadata.get().clear();
         BlockNode root = parseBlock(cursor, null);
+        if (cursor.hasNext()) {
+            Token t = cursor.peek();
+            if (t.type() == TokenType.ELSE) {
+                throw new TemplateSyntaxException("Unexpected |else| without matching block at index " + t.position());
+            } else if (t.type() == TokenType.END_IF) {
+                throw new TemplateSyntaxException("Unexpected |/if| without matching |if| at index " + t.position());
+            } else if (t.type() == TokenType.END_EACH) {
+                throw new TemplateSyntaxException("Unexpected |/each| without matching |each| at index " + t.position());
+            } else if (t.type() == TokenType.END_FOR) {
+                throw new TemplateSyntaxException("Unexpected |/for| without matching |for| at index " + t.position());
+            }
+        }
         java.util.Map<String, Object> metadata = new java.util.HashMap<>(threadLocalMetadata.get());
         threadLocalMetadata.get().clear();
         return new CompiledTemplate(root, metadata);
@@ -46,6 +60,20 @@ public final class Parser {
                 }
                 case IF -> nodes.add(parseIf(token, cursor));
                 case EACH -> nodes.add(parseEach(token, cursor));
+                case FOR -> nodes.add(parseFor(token, cursor));
+                case BREAK -> {
+                    if (loopDepth == 0) {
+                        throw new TemplateSyntaxException("|break| is only allowed inside a loop.");
+                    }
+                    nodes.add(new io.lemadane.piped.template.engine.ast.BreakNode());
+                }
+                case CONTINUE -> {
+                    if (loopDepth == 0) {
+                        throw new TemplateSyntaxException("|continue| is only allowed inside a loop.");
+                    }
+                    nodes.add(new io.lemadane.piped.template.engine.ast.ContinueNode());
+                }
+                case END_FOR -> throw new TemplateSyntaxException("Unexpected |/for| without matching |for|.");
                 case MODEL -> nodes.add(new ModelNode(token.value().substring("model ".length()).trim()));
                 case FIELD -> nodes.add(new FieldNode(token.value().substring("field ".length()).trim(), evaluator));
                 case DISPLAY -> nodes.add(new DisplayNode(token.value().substring("display ".length()).trim(), evaluator));
@@ -118,6 +146,7 @@ public final class Parser {
 
     private EachNode parseEach(Token eachToken, Cursor cursor) {
         eachDepth++;
+        loopDepth++;
         try {
             String statement = eachToken.value().substring("each ".length()).trim();
             int inIndex = statement.indexOf(" in ");
@@ -134,10 +163,15 @@ public final class Parser {
             if (cursor.hasNext() && cursor.peek().type() == TokenType.ELSE) {
                 cursor.next();
                 elseBlock = parseBlock(cursor, TokenType.END_EACH);
+                if (cursor.hasNext() && cursor.peek().type() == TokenType.ELSE) {
+                    throw new TemplateSyntaxException("Multiple |else| blocks inside loop.");
+                }
             }
 
             if (cursor.hasNext() && cursor.peek().type() == TokenType.END_EACH) {
                 cursor.next();
+            } else {
+                throw new TemplateSyntaxException("Missing closing |/each|.");
             }
 
             ASTNode separatorNode = null;
@@ -156,6 +190,77 @@ public final class Parser {
             return new EachNode(itemName, collectionExpr, bodyBlock, elseBlock, separatorNode, evaluator);
         } finally {
             eachDepth--;
+            loopDepth--;
+        }
+    }
+
+    private io.lemadane.piped.template.engine.ast.ForNode parseFor(Token forToken, Cursor cursor) {
+        eachDepth++;
+        loopDepth++;
+        try {
+            String statement = forToken.value().substring("for ".length()).trim();
+            int fromIndex = statement.indexOf(" from ");
+            if (fromIndex == -1) {
+                throw new TemplateSyntaxException("Invalid for statement format. Missing 'from' keyword.");
+            }
+
+            String itemName = statement.substring(0, fromIndex).trim();
+            if (itemName.isEmpty()) {
+                throw new TemplateSyntaxException("Missing loop variable in for directive.");
+            }
+
+            String fromRemainder = statement.substring(fromIndex + 6).trim();
+            int toIndex = fromRemainder.indexOf(" to ");
+            if (toIndex == -1) {
+                throw new TemplateSyntaxException("Invalid for statement format. Missing 'to' boundary.");
+            }
+
+            String startExpr = fromRemainder.substring(0, toIndex).trim();
+            if (startExpr.isEmpty()) {
+                throw new TemplateSyntaxException("Missing start expression in for directive.");
+            }
+
+            String toRemainder = fromRemainder.substring(toIndex + 4).trim();
+            String endExpr;
+            String stepExpr = null;
+
+            int stepIndex = toRemainder.indexOf(" step ");
+            if (stepIndex != -1) {
+                endExpr = toRemainder.substring(0, stepIndex).trim();
+                stepExpr = toRemainder.substring(stepIndex + 6).trim();
+                if (stepExpr.isEmpty()) {
+                    throw new TemplateSyntaxException("Missing step expression in for directive.");
+                }
+            } else {
+                endExpr = toRemainder.trim();
+            }
+
+            if (endExpr.isEmpty()) {
+                throw new TemplateSyntaxException("Missing end expression in for directive.");
+            }
+
+            ASTNode bodyBlock = parseBlock(cursor, TokenType.END_FOR);
+            ASTNode elseBlock = null;
+
+            if (cursor.hasNext() && cursor.peek().type() == TokenType.ELSE) {
+                cursor.next();
+                elseBlock = parseBlock(cursor, TokenType.END_FOR);
+                if (cursor.hasNext() && cursor.peek().type() == TokenType.ELSE) {
+                    throw new TemplateSyntaxException("Multiple |else| blocks inside loop.");
+                }
+            }
+
+            if (cursor.hasNext() && cursor.peek().type() == TokenType.END_FOR) {
+                cursor.next();
+            } else {
+                throw new TemplateSyntaxException("Missing closing |/for|.");
+            }
+
+            return new io.lemadane.piped.template.engine.ast.ForNode(
+                    itemName, startExpr, endExpr, stepExpr, bodyBlock, elseBlock, evaluator);
+        } finally {
+            eachDepth--;
+            loopDepth--;
         }
     }
 

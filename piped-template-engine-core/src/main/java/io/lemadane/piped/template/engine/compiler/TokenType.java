@@ -46,5 +46,9 @@ public enum TokenType {
     HX_ATTR,
     ALPINE,
     STATE,
+    FOR,
+    END_FOR,
+    CONTINUE,
+    BREAK,
     ALPINE_ATTR
 }

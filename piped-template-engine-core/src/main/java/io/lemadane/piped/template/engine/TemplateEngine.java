@@ -68,6 +68,7 @@ public final class TemplateEngine {
     private final ThreadLocal<ArrayDeque<String>> templateStack;
     private final ThreadLocal<ArrayDeque<Map<String, String>>> sectionStack;
     private final ThreadLocal<ArrayDeque<Map<String, String>>> slotStack;
+    private final ThreadLocal<Integer> loopDepth;
     private final Map<String, String> includedTemplates;
     private final io.lemadane.piped.template.engine.compiler.TemplateCache templateCache;
     private final io.lemadane.piped.template.engine.compiler.Lexer lexer;
@@ -120,6 +121,7 @@ public final class TemplateEngine {
         this.templateStack = ThreadLocal.withInitial(ArrayDeque::new);
         this.sectionStack = ThreadLocal.withInitial(ArrayDeque::new);
         this.slotStack = ThreadLocal.withInitial(ArrayDeque::new);
+        this.loopDepth = ThreadLocal.withInitial(() -> 0);
         this.includedTemplates = normalizeIncludedTemplates(includedTemplates);
     }
 
@@ -1023,15 +1025,57 @@ public final class TemplateEngine {
                 final var ifExpression = source.substring("if ".length()).trim();
                 final var ifBlock = findIfBlock(template, closingPipeIndex + 1, endIndex);
 
-                output.append(renderIfBlock(
-                        template,
-                        context,
-                        ifExpression,
-                        closingPipeIndex + 1,
-                        ifBlock));
+                try {
+                    output.append(renderIfBlock(
+                            template,
+                            context,
+                            ifExpression,
+                            closingPipeIndex + 1,
+                            ifBlock));
+                } catch (io.lemadane.piped.template.engine.exceptions.LoopContinueException e) {
+                    output.append(e.getPartialOutput());
+                    throw new io.lemadane.piped.template.engine.exceptions.LoopContinueException(output.toString());
+                } catch (io.lemadane.piped.template.engine.exceptions.LoopBreakException e) {
+                    output.append(e.getPartialOutput());
+                    throw new io.lemadane.piped.template.engine.exceptions.LoopBreakException(output.toString());
+                }
 
                 index = ifBlock.endEndIndex();
                 continue;
+            }
+
+            if (source.startsWith("for ")) {
+                final var forBlock = findForBlock(template, closingPipeIndex + 1, endIndex);
+                output.append(renderForBlock(
+                        template,
+                        context,
+                        source,
+                        forBlock,
+                        closingPipeIndex + 1));
+
+                index = forBlock.endEndIndex();
+                continue;
+            }
+
+            if ("/for".equals(source)) {
+                throw new TemplateSyntaxException(
+                        "Unexpected |/for| without matching |for| at index " + index + ".");
+            }
+
+            if ("continue".equals(source)) {
+                if (loopDepth.get() == 0) {
+                    throw new TemplateSyntaxException(
+                            "|continue| is only allowed inside a loop at index " + index + ".");
+                }
+                throw new io.lemadane.piped.template.engine.exceptions.LoopContinueException(output.toString());
+            }
+
+            if ("break".equals(source)) {
+                if (loopDepth.get() == 0) {
+                    throw new TemplateSyntaxException(
+                            "|break| is only allowed inside a loop at index " + index + ".");
+                }
+                throw new io.lemadane.piped.template.engine.exceptions.LoopBreakException(output.toString());
             }
 
             if (source.startsWith("each ")) {
@@ -1236,16 +1280,29 @@ public final class TemplateEngine {
 
         final var output = new StringBuilder();
 
-        for (int index = 0; index < items.size(); index++) {
-            final var childValues = new HashMap<String, Object>();
-            childValues.put(eachStatement.itemName(), items.get(index));
-            childValues.put("each", EachMetadata.of(index, items.size()));
+        int currentDepth = loopDepth.get();
+        loopDepth.set(currentDepth + 1);
+        try {
+            for (int index = 0; index < items.size(); index++) {
+                final var childValues = new HashMap<String, Object>();
+                childValues.put(eachStatement.itemName(), items.get(index));
+                childValues.put("each", EachMetadata.of(index, items.size()));
 
-            output.append(renderRange(
-                    template,
-                    context.withAll(childValues),
-                    bodyStartIndex,
-                    itemBodyEndIndex));
+                try {
+                    output.append(renderRange(
+                            template,
+                            context.withAll(childValues),
+                            bodyStartIndex,
+                            itemBodyEndIndex));
+                } catch (io.lemadane.piped.template.engine.exceptions.LoopContinueException e) {
+                    output.append(e.getPartialOutput());
+                } catch (io.lemadane.piped.template.engine.exceptions.LoopBreakException e) {
+                    output.append(e.getPartialOutput());
+                    break;
+                }
+            }
+        } finally {
+            loopDepth.set(currentDepth);
         }
 
         return output.toString();
@@ -1278,16 +1335,29 @@ public final class TemplateEngine {
 
         final var output = new StringBuilder();
 
-        for (int index = 0; index < entries.size(); index++) {
-            final var childValues = new HashMap<String, Object>();
-            childValues.put(eachStatement.itemName(), entries.get(index));
-            childValues.put("each", EachMetadata.of(index, entries.size()));
+        int currentDepth = loopDepth.get();
+        loopDepth.set(currentDepth + 1);
+        try {
+            for (int index = 0; index < entries.size(); index++) {
+                final var childValues = new HashMap<String, Object>();
+                childValues.put(eachStatement.itemName(), entries.get(index));
+                childValues.put("each", EachMetadata.of(index, entries.size()));
 
-            output.append(renderRange(
-                    template,
-                    context.withAll(childValues),
-                    bodyStartIndex,
-                    itemBodyEndIndex));
+                try {
+                    output.append(renderRange(
+                            template,
+                            context.withAll(childValues),
+                            bodyStartIndex,
+                            itemBodyEndIndex));
+                } catch (io.lemadane.piped.template.engine.exceptions.LoopContinueException e) {
+                    output.append(e.getPartialOutput());
+                } catch (io.lemadane.piped.template.engine.exceptions.LoopBreakException e) {
+                    output.append(e.getPartialOutput());
+                    break;
+                }
+            }
+        } finally {
+            loopDepth.set(currentDepth);
         }
 
         return output.toString();
@@ -1337,22 +1407,273 @@ public final class TemplateEngine {
 
         final var output = new StringBuilder();
 
-        for (int index = 0; index < entries.size(); index++) {
-            final var entry = entries.get(index);
+        int currentDepth = loopDepth.get();
+        loopDepth.set(currentDepth + 1);
+        try {
+            for (int index = 0; index < entries.size(); index++) {
+                final var entry = entries.get(index);
 
-            final var childValues = new HashMap<String, Object>();
-            childValues.put(eachStatement.keyName(), entry.getKey());
-            childValues.put(eachStatement.valueName(), entry.getValue());
-            childValues.put("each", EachMetadata.of(index, entries.size()));
+                final var childValues = new HashMap<String, Object>();
+                childValues.put(eachStatement.keyName(), entry.getKey());
+                childValues.put(eachStatement.valueName(), entry.getValue());
+                childValues.put("each", EachMetadata.of(index, entries.size()));
 
-            output.append(renderRange(
-                    template,
-                    context.withAll(childValues),
-                    bodyStartIndex,
-                    itemBodyEndIndex));
+                try {
+                    output.append(renderRange(
+                            template,
+                            context.withAll(childValues),
+                            bodyStartIndex,
+                            itemBodyEndIndex));
+                } catch (io.lemadane.piped.template.engine.exceptions.LoopContinueException e) {
+                    output.append(e.getPartialOutput());
+                } catch (io.lemadane.piped.template.engine.exceptions.LoopBreakException e) {
+                    output.append(e.getPartialOutput());
+                    break;
+                }
+            }
+        } finally {
+            loopDepth.set(currentDepth);
         }
 
         return output.toString();
+    }
+
+    private record ForBlock(
+            int elseStartIndex,
+            int elseEndIndex,
+            int endStartIndex,
+            int endEndIndex) {
+        public boolean hasElse() {
+            return elseStartIndex != -1;
+        }
+    }
+
+    private ForBlock findForBlock(String template, int searchStartIndex, int endIndex) {
+        int forDepth = 1;
+        int eachDepth = 0;
+        int ifDepth = 0;
+        int switchDepth = 0;
+        int index = searchStartIndex;
+
+        int elseStartIndex = -1;
+        int elseEndIndex = -1;
+
+        while (index < endIndex) {
+            final var openingPipeIndex = template.indexOf('|', index);
+
+            if (openingPipeIndex == -1 || openingPipeIndex >= endIndex) {
+                break;
+            }
+
+            if (isCommentStart(template, openingPipeIndex)) {
+                index = findCommentEndIndex(template, openingPipeIndex);
+                continue;
+            }
+
+            final var closingPipeIndex = template.indexOf('|', openingPipeIndex + 1);
+
+            if (closingPipeIndex == -1 || closingPipeIndex >= endIndex) {
+                throw new TemplateSyntaxException(
+                        "Missing closing pipe for expression starting at index "
+                                + openingPipeIndex
+                                + ".");
+            }
+
+            final var source = template.substring(
+                    openingPipeIndex + 1,
+                    closingPipeIndex)
+                    .trim();
+
+            if (source.startsWith("switch ")) {
+                switchDepth++;
+            } else if ("/switch".equals(source)) {
+                switchDepth--;
+            } else if (source.startsWith("if ")) {
+                ifDepth++;
+            } else if ("/if".equals(source)) {
+                ifDepth--;
+            } else if (source.startsWith("each ")) {
+                eachDepth++;
+            } else if ("/each".equals(source)) {
+                eachDepth--;
+            } else if (source.startsWith("for ")) {
+                forDepth++;
+            } else if ("/for".equals(source)) {
+                forDepth--;
+
+                if (forDepth == 0 && eachDepth == 0 && ifDepth == 0 && switchDepth == 0) {
+                    return new ForBlock(
+                            elseStartIndex,
+                            elseEndIndex,
+                            openingPipeIndex,
+                            closingPipeIndex + 1);
+                }
+            } else if ("else".equals(source) && forDepth == 1 && eachDepth == 0 && ifDepth == 0 && switchDepth == 0) {
+                if (elseStartIndex != -1) {
+                    throw new TemplateSyntaxException(
+                            "Only one |else| is allowed inside a |for| block.");
+                }
+
+                elseStartIndex = openingPipeIndex;
+                elseEndIndex = closingPipeIndex + 1;
+            }
+
+            index = closingPipeIndex + 1;
+        }
+
+        throw new TemplateSyntaxException("Missing closing |/for|.");
+    }
+
+    private String renderForBlock(
+            String template,
+            TemplateContext context,
+            String source,
+            ForBlock forBlock,
+            int bodyStartIndex) {
+        String statement = source.substring("for ".length()).trim();
+        int fromIndex = statement.indexOf(" from ");
+        if (fromIndex == -1) {
+            throw new TemplateSyntaxException("Invalid for statement format. Missing 'from' keyword.");
+        }
+
+        String varName = statement.substring(0, fromIndex).trim();
+        if (varName.isEmpty()) {
+            throw new TemplateSyntaxException("Missing loop variable in for directive.");
+        }
+
+        String fromRemainder = statement.substring(fromIndex + 6).trim();
+        int toIndex = fromRemainder.indexOf(" to ");
+        if (toIndex == -1) {
+            throw new TemplateSyntaxException("Invalid for statement format. Missing 'to' boundary.");
+        }
+
+        String startExpr = fromRemainder.substring(0, toIndex).trim();
+        if (startExpr.isEmpty()) {
+            throw new TemplateSyntaxException("Missing start expression in for directive.");
+        }
+
+        String toRemainder = fromRemainder.substring(toIndex + 4).trim();
+        String endExpr;
+        String stepExpr = null;
+
+        int stepIndex = toRemainder.indexOf(" step ");
+        if (stepIndex != -1) {
+            endExpr = toRemainder.substring(0, stepIndex).trim();
+            stepExpr = toRemainder.substring(stepIndex + 6).trim();
+            if (stepExpr.isEmpty()) {
+                throw new TemplateSyntaxException("Missing step expression in for directive.");
+            }
+        } else {
+            endExpr = toRemainder.trim();
+        }
+
+        if (endExpr.isEmpty()) {
+            throw new TemplateSyntaxException("Missing end expression in for directive.");
+        }
+
+        Object rawStart = expressionEvaluator.evaluate(startExpr, context);
+        int start = toInt(rawStart, startExpr);
+
+        Object rawEnd = expressionEvaluator.evaluate(endExpr, context);
+        int end = toInt(rawEnd, endExpr);
+
+        int step = 1;
+        if (stepExpr != null && !stepExpr.isEmpty()) {
+            Object rawStep = expressionEvaluator.evaluate(stepExpr, context);
+            step = toInt(rawStep, stepExpr);
+        }
+
+        if (step <= 0) {
+            throw new TemplateRenderException("Step must be a positive integer, got: " + step);
+        }
+
+        final var itemBodyEndIndex = forBlock.hasElse()
+                ? forBlock.elseStartIndex()
+                : forBlock.endStartIndex();
+
+        final var output = new StringBuilder();
+        boolean executedAtLeastOnce = false;
+
+        int currentDepth = loopDepth.get();
+        loopDepth.set(currentDepth + 1);
+        try {
+            if (start < end) {
+                for (int current = start; current <= end; current += step) {
+                    executedAtLeastOnce = true;
+                    TemplateContext subContext = context.with(varName, current);
+                    try {
+                        output.append(renderRange(
+                                template,
+                                subContext,
+                                bodyStartIndex,
+                                itemBodyEndIndex));
+                    } catch (io.lemadane.piped.template.engine.exceptions.LoopContinueException e) {
+                        output.append(e.getPartialOutput());
+                    } catch (io.lemadane.piped.template.engine.exceptions.LoopBreakException e) {
+                        output.append(e.getPartialOutput());
+                        break;
+                    }
+                }
+            } else if (start > end) {
+                for (int current = start; current >= end; current -= step) {
+                    executedAtLeastOnce = true;
+                    TemplateContext subContext = context.with(varName, current);
+                    try {
+                        output.append(renderRange(
+                                template,
+                                subContext,
+                                bodyStartIndex,
+                                itemBodyEndIndex));
+                    } catch (io.lemadane.piped.template.engine.exceptions.LoopContinueException e) {
+                        output.append(e.getPartialOutput());
+                    } catch (io.lemadane.piped.template.engine.exceptions.LoopBreakException e) {
+                        output.append(e.getPartialOutput());
+                        break;
+                    }
+                }
+            } else {
+                // start == end
+                executedAtLeastOnce = true;
+                TemplateContext subContext = context.with(varName, start);
+                try {
+                    output.append(renderRange(
+                            template,
+                            subContext,
+                            bodyStartIndex,
+                            itemBodyEndIndex));
+                } catch (io.lemadane.piped.template.engine.exceptions.LoopContinueException e) {
+                    output.append(e.getPartialOutput());
+                } catch (io.lemadane.piped.template.engine.exceptions.LoopBreakException e) {
+                    output.append(e.getPartialOutput());
+                }
+            }
+        } finally {
+            loopDepth.set(currentDepth);
+        }
+
+        if (!executedAtLeastOnce && forBlock.hasElse()) {
+            return renderRange(
+                    template,
+                    context,
+                    forBlock.elseEndIndex(),
+                    forBlock.endStartIndex());
+        }
+
+        return output.toString();
+    }
+
+    private int toInt(Object val, String expr) {
+        if (val == null) {
+            throw new TemplateRenderException("Expression '" + expr + "' evaluated to null");
+        }
+        if (val instanceof Number number) {
+            return number.intValue();
+        }
+        try {
+            return Integer.parseInt(val.toString().trim());
+        } catch (NumberFormatException e) {
+            throw new TemplateRenderException("Invalid integer value for expression '" + expr + "': " + val);
+        }
     }
 
     private String renderSwitchBlock(
@@ -1455,6 +1776,7 @@ public final class TemplateEngine {
         int ifDepth = 1;
         int eachDepth = 0;
         int switchDepth = 0;
+        int forDepth = 0;
         int index = searchStartIndex;
 
         int ifBodyEndIndex = -1;
@@ -1485,7 +1807,7 @@ public final class TemplateEngine {
             }
 
             final var source = template.substring(openingPipeIndex + 1, closingPipeIndex).trim();
-            final var topLevelIfControl = ifDepth == 1 && eachDepth == 0 && switchDepth == 0;
+            final var topLevelIfControl = ifDepth == 1 && eachDepth == 0 && switchDepth == 0 && forDepth == 0;
 
             if (topLevelIfControl && isElseIfSource(source)) {
                 if (insideElse) {
@@ -1564,6 +1886,10 @@ public final class TemplateEngine {
                 eachDepth++;
             } else if ("/each".equals(source)) {
                 eachDepth--;
+            } else if (source.startsWith("for ")) {
+                forDepth++;
+            } else if ("/for".equals(source)) {
+                forDepth--;
             } else if (source.startsWith("switch ")) {
                 switchDepth++;
             } else if ("/switch".equals(source)) {

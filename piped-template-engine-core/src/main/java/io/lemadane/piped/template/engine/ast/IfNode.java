@@ -28,6 +28,10 @@ public final class IfNode implements ASTNode {
         this.evaluator = evaluator;
     }
 
+    public String getIfCondition() {
+        return ifCondition;
+    }
+
     public ASTNode getThenBlock() {
         return thenBlock;
     }

@@ -160,6 +160,88 @@ public final class JavaCodeGenerator {
             sb.append(indent).append("new io.lemadane.piped.template.engine.ast.AlpineAttrNode(")
                     .append(escapeStringLiteral(alpineAttrNode.getDirective())).append(", ")
                     .append(escapeStringLiteral(alpineAttrNode.getValue())).append(").render(context, writer);\n");
+        } else if (node instanceof io.lemadane.piped.template.engine.ast.IfNode ifNode) {
+            sb.append(indent).append("if (engine.evaluateBoolean(").append(escapeStringLiteral(ifNode.getIfCondition())).append(", context)) {\n");
+            generateNodeSource(ifNode.getThenBlock(), sb, indent + "    ");
+            for (var elseIf : ifNode.getElseIfBranches()) {
+                sb.append(indent).append("} else if (engine.evaluateBoolean(").append(escapeStringLiteral(elseIf.condition())).append(", context)) {\n");
+                generateNodeSource(elseIf.block(), sb, indent + "    ");
+            }
+            if (ifNode.getElseBlock() != null) {
+                sb.append(indent).append("} else {\n");
+                generateNodeSource(ifNode.getElseBlock(), sb, indent + "    ");
+            }
+            sb.append(indent).append("}\n");
+        } else if (node instanceof io.lemadane.piped.template.engine.ast.BreakNode) {
+            sb.append(indent).append("throw new io.lemadane.piped.template.engine.exceptions.LoopBreakException();\n");
+        } else if (node instanceof io.lemadane.piped.template.engine.ast.ContinueNode) {
+            sb.append(indent).append("throw new io.lemadane.piped.template.engine.exceptions.LoopContinueException();\n");
+        } else if (node instanceof io.lemadane.piped.template.engine.ast.ForNode forNode) {
+            sb.append(indent).append("{\n");
+            sb.append(indent).append("    io.lemadane.piped.template.engine.expression.ExpressionEvaluator eval = new io.lemadane.piped.template.engine.expression.ExpressionEvaluator();\n");
+            sb.append(indent).append("    Object rawStart = eval.evaluate(").append(escapeStringLiteral(forNode.getStartExpression())).append(", context);\n");
+            sb.append(indent).append("    int start = rawStart instanceof Number n ? n.intValue() : Integer.parseInt(rawStart.toString().trim());\n");
+            sb.append(indent).append("    Object rawEnd = eval.evaluate(").append(escapeStringLiteral(forNode.getEndExpression())).append(", context);\n");
+            sb.append(indent).append("    int end = rawEnd instanceof Number n ? n.intValue() : Integer.parseInt(rawEnd.toString().trim());\n");
+            if (forNode.getStepExpression() != null && !forNode.getStepExpression().isEmpty()) {
+                sb.append(indent).append("    Object rawStep = eval.evaluate(").append(escapeStringLiteral(forNode.getStepExpression())).append(", context);\n");
+                sb.append(indent).append("    int step = rawStep instanceof Number n ? n.intValue() : Integer.parseInt(rawStep.toString().trim());\n");
+            } else {
+                sb.append(indent).append("    int step = 1;\n");
+            }
+            sb.append(indent).append("    if (step <= 0) throw new io.lemadane.piped.template.engine.exceptions.TemplateRenderException(\"Step must be a positive integer, got: \" + step);\n");
+            sb.append(indent).append("    boolean executedAtLeastOnce = false;\n");
+            sb.append(indent).append("    if (start < end) {\n");
+            sb.append(indent).append("        for (int current = start; current <= end; current += step) {\n");
+            sb.append(indent).append("            executedAtLeastOnce = true;\n");
+            sb.append(indent).append("            io.lemadane.piped.template.engine.expression.TemplateContext subCtx = context.with(").append(escapeStringLiteral(forNode.getVarName())).append(", current);\n");
+            sb.append(indent).append("            io.lemadane.piped.template.engine.expression.TemplateContext prevCtx = context;\n");
+            sb.append(indent).append("            context = subCtx;\n");
+            sb.append(indent).append("            try {\n");
+            generateNodeSource(forNode.getBodyBlock(), sb, indent + "                ");
+            sb.append(indent).append("            } catch (io.lemadane.piped.template.engine.exceptions.LoopContinueException e) {\n");
+            sb.append(indent).append("            } catch (io.lemadane.piped.template.engine.exceptions.LoopBreakException e) {\n");
+            sb.append(indent).append("                context = prevCtx;\n");
+            sb.append(indent).append("                break;\n");
+            sb.append(indent).append("            } finally {\n");
+            sb.append(indent).append("                context = prevCtx;\n");
+            sb.append(indent).append("            }\n");
+            sb.append(indent).append("        }\n");
+            sb.append(indent).append("    } else if (start > end) {\n");
+            sb.append(indent).append("        for (int current = start; current >= end; current -= step) {\n");
+            sb.append(indent).append("            executedAtLeastOnce = true;\n");
+            sb.append(indent).append("            io.lemadane.piped.template.engine.expression.TemplateContext subCtx = context.with(").append(escapeStringLiteral(forNode.getVarName())).append(", current);\n");
+            sb.append(indent).append("            io.lemadane.piped.template.engine.expression.TemplateContext prevCtx = context;\n");
+            sb.append(indent).append("            context = subCtx;\n");
+            sb.append(indent).append("            try {\n");
+            generateNodeSource(forNode.getBodyBlock(), sb, indent + "                ");
+            sb.append(indent).append("            } catch (io.lemadane.piped.template.engine.exceptions.LoopContinueException e) {\n");
+            sb.append(indent).append("            } catch (io.lemadane.piped.template.engine.exceptions.LoopBreakException e) {\n");
+            sb.append(indent).append("                context = prevCtx;\n");
+            sb.append(indent).append("                break;\n");
+            sb.append(indent).append("            } finally {\n");
+            sb.append(indent).append("                context = prevCtx;\n");
+            sb.append(indent).append("            }\n");
+            sb.append(indent).append("        }\n");
+            sb.append(indent).append("    } else {\n");
+            sb.append(indent).append("        executedAtLeastOnce = true;\n");
+            sb.append(indent).append("        io.lemadane.piped.template.engine.expression.TemplateContext subCtx = context.with(").append(escapeStringLiteral(forNode.getVarName())).append(", start);\n");
+            sb.append(indent).append("        io.lemadane.piped.template.engine.expression.TemplateContext prevCtx = context;\n");
+            sb.append(indent).append("        context = subCtx;\n");
+            sb.append(indent).append("        try {\n");
+            generateNodeSource(forNode.getBodyBlock(), sb, indent + "            ");
+            sb.append(indent).append("        } catch (io.lemadane.piped.template.engine.exceptions.LoopContinueException e) {\n");
+            sb.append(indent).append("        } catch (io.lemadane.piped.template.engine.exceptions.LoopBreakException e) {\n");
+            sb.append(indent).append("        } finally {\n");
+            sb.append(indent).append("            context = prevCtx;\n");
+            sb.append(indent).append("        }\n");
+            sb.append(indent).append("    }\n");
+            if (forNode.getElseBlock() != null) {
+                sb.append(indent).append("    if (!executedAtLeastOnce) {\n");
+                generateNodeSource(forNode.getElseBlock(), sb, indent + "        ");
+                sb.append(indent).append("    }\n");
+            }
+            sb.append(indent).append("}\n");
         }
     }
 

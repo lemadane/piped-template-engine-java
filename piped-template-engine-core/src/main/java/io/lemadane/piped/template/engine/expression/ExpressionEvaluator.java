@@ -171,6 +171,39 @@ public final class ExpressionEvaluator {
                   return new BigDecimal(trimmedExpression);
             }
 
+            final var plusIndex = findTopLevelChar(trimmedExpression, '+');
+            if (plusIndex != -1) {
+                  final var leftExpr = trimmedExpression.substring(0, plusIndex).trim();
+                  if (!leftExpr.isEmpty()) {
+                        final var leftVal = evaluateValue(leftExpr, context);
+                        final var rightVal = evaluateValue(trimmedExpression.substring(plusIndex + 1).trim(), context);
+                        if (leftVal instanceof String || rightVal instanceof String) {
+                              return String.valueOf(leftVal) + String.valueOf(rightVal);
+                        }
+                        return toBigDecimal(leftVal).add(toBigDecimal(rightVal));
+                  }
+            }
+
+            final var minusIndex = findTopLevelChar(trimmedExpression, '-');
+            if (minusIndex != -1) {
+                  final var leftExpr = trimmedExpression.substring(0, minusIndex).trim();
+                  if (!leftExpr.isEmpty()) {
+                        final var leftVal = evaluateValue(leftExpr, context);
+                        final var rightVal = evaluateValue(trimmedExpression.substring(minusIndex + 1).trim(), context);
+                        return toBigDecimal(leftVal).subtract(toBigDecimal(rightVal));
+                  }
+            }
+
+            final var starIndex = findTopLevelChar(trimmedExpression, '*');
+            if (starIndex != -1) {
+                  final var leftExpr = trimmedExpression.substring(0, starIndex).trim();
+                  if (!leftExpr.isEmpty()) {
+                        final var leftVal = evaluateValue(leftExpr, context);
+                        final var rightVal = evaluateValue(trimmedExpression.substring(starIndex + 1).trim(), context);
+                        return toBigDecimal(leftVal).multiply(toBigDecimal(rightVal));
+                  }
+            }
+
             final var slashIndex = findTopLevelSlash(trimmedExpression);
             if (slashIndex != -1) {
                   final var leftExpr = trimmedExpression.substring(0, slashIndex).trim();
@@ -1044,6 +1077,46 @@ public final class ExpressionEvaluator {
                   }
 
                   if (parenthesisDepth == 0 && current == '/') {
+                        return index;
+                  }
+            }
+
+            return -1;
+      }
+
+      private int findTopLevelChar(String expression, char targetChar) {
+            boolean insideSingleQuote = false;
+            boolean insideDoubleQuote = false;
+            int parenthesisDepth = 0;
+
+            for (int index = expression.length() - 1; index >= 0; index--) {
+                  final var current = expression.charAt(index);
+
+                  if (current == '\'' && !insideDoubleQuote) {
+                        insideSingleQuote = !insideSingleQuote;
+                        continue;
+                  }
+
+                  if (current == '"' && !insideSingleQuote) {
+                        insideDoubleQuote = !insideDoubleQuote;
+                        continue;
+                  }
+
+                  if (insideSingleQuote || insideDoubleQuote) {
+                        continue;
+                  }
+
+                  if (current == ')') {
+                        parenthesisDepth++;
+                        continue;
+                  }
+
+                  if (current == '(') {
+                        parenthesisDepth--;
+                        continue;
+                  }
+
+                  if (parenthesisDepth == 0 && current == targetChar) {
                         return index;
                   }
             }

@@ -42,19 +42,35 @@ public final class PropertyReader {
     }
 
     private Object readProperty(Object source, String propertyName, boolean optional) {
+        String cleanPropName = propertyName.endsWith("()") ? propertyName.substring(0, propertyName.length() - 2) : propertyName;
+
         if (source instanceof Map<?, ?> map) {
+            if (map.containsKey(cleanPropName)) {
+                return map.get(cleanPropName);
+            }
+            if ("size".equals(cleanPropName)) {
+                return map.size();
+            }
             return map.get(propertyName);
+        }
+
+        if (source instanceof java.util.Collection<?> col && "size".equals(cleanPropName)) {
+            return col.size();
+        }
+
+        if (source.getClass().isArray() && ("size".equals(cleanPropName) || "length".equals(cleanPropName))) {
+            return java.lang.reflect.Array.getLength(source);
         }
 
         if (source instanceof Map.Entry<?, ?> entry) {
             return readMapEntryProperty(
                     entry,
-                    propertyName,
+                    cleanPropName,
                     optional);
         }
 
         final var sourceType = source.getClass();
-        final var cacheKey = sourceType.getName() + ":" + propertyName;
+        final var cacheKey = sourceType.getName() + ":" + cleanPropName;
 
         MethodHandle handle = handleCache.get(cacheKey);
         if (handle != null) {
@@ -65,7 +81,7 @@ public final class PropertyReader {
             }
         }
 
-        handle = findAndCreateHandle(sourceType, propertyName);
+        handle = findAndCreateHandle(sourceType, cleanPropName);
 
         if (handle != null) {
             handleCache.put(cacheKey, handle);

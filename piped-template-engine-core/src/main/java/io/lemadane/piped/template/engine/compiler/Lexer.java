@@ -67,6 +67,14 @@ public final class Lexer {
             return TokenType.EACH;
         } else if ("/each".equals(content)) {
             return TokenType.END_EACH;
+        } else if (content.startsWith("for ")) {
+            return TokenType.FOR;
+        } else if ("/for".equals(content)) {
+            return TokenType.END_FOR;
+        } else if ("continue".equals(content)) {
+            return TokenType.CONTINUE;
+        } else if ("break".equals(content)) {
+            return TokenType.BREAK;
         } else if (content.startsWith("switch ")) {
             return TokenType.SWITCH;
         } else if (content.startsWith("case ")) {

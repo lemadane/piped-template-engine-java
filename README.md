@@ -16,9 +16,10 @@
 ##  Why Use Piped Template Engine?
 
 1. ** Native Bytecode Performance**: PTE transpiles template AST trees into Java source and compiles them **in-memory** to live `.class` JVM bytecode. It runs at native JVM speed, matching **JTE** and executing **3x–8x faster than Thymeleaf** with zero disk I/O.
-2. ** SvelteKit-Style Routing**: Stop writing boilerplate Java `@Controller` mappings just to load static pages. PTE registers routes automatically from your directory structure.
-3. ** Built for HTMX**: Render specific page zones dynamically using inline **Fragments**, compile clean **Target DOM IDs** using the slug filter, and perform out-of-band updates with zero friction.
-4. ** Secure by Default**: Automatically escapes all variables to defend against Cross-Site Scripting (XSS) attacks.
+2. ** Rich Control Flow**: First-class support for collection loops (`|each|`), auto-directional numeric range loops (`|for i from 1 to 10 step 2|`), loop control flow (`|continue|`, `|break|`), and empty-state `|else|` fallback blocks.
+3. ** SvelteKit-Style Routing**: Stop writing boilerplate Java `@Controller` mappings just to load static pages. PTE registers routes automatically from your directory structure.
+4. ** Built for HTMX**: Render specific page zones dynamically using inline **Fragments**, compile clean **Target DOM IDs** using the slug filter, and perform out-of-band updates with zero friction.
+5. ** Secure by Default**: Automatically escapes all variables to defend against Cross-Site Scripting (XSS) attacks.
 
 ---
 
@@ -179,8 +180,8 @@ Efficient multi-branch switch statements. Supports explicit `fallthrough`.
 
 ---
 
-### 10. Loops (`|each|`)
-Loop over Collections, Sets, Maps, and Arrays. Provides a fallback `|else|` if the collection is empty or null.
+### 10. Collection Loops (`|each|`)
+Loop over Collections, Sets, Maps, and Arrays. Provides an empty-state `|else|` block that executes when the collection is empty or null.
 
 ```html
 <ul>
@@ -194,8 +195,57 @@ Loop over Collections, Sets, Maps, and Arrays. Provides a fallback `|else|` if t
 
 ---
 
-### 11. Loop Metadata
-Access iteration state properties (`index`, `count`, `first`, `last`, `total`) using the local `each` scope inside any loop.
+### 11. Range-Based Loops (`|for|`)
+Loop over numeric integer ranges with automatic direction detection (ascending or descending) and optional step distance expressions.
+
+```html
+<!-- Ascending Range (1 to 5) -->
+|for i from 1 to 5|
+    <span>|i|</span>
+|/for|
+
+<!-- Descending Range with Step (10 down to 1 step 2 -> 10, 8, 6, 4, 2) -->
+|for i from 10 to 1 step 2|
+    <span>|i|</span>
+|/for|
+
+<!-- Expression Boundaries & Empty-State Else -->
+|for i from start to end step interval|
+    <span>|i|</span>
+|else|
+    <p>Range is empty.</p>
+|/for|
+```
+
+* **Direction Rules**: Ascending when `start < end`, descending when `start > end`, 1 iteration when `start == end`.
+* **Step**: Defaults to `1`. Must evaluate to a positive integer.
+* **Scoping**: The loop variable has block scope and is available only inside the loop body.
+
+---
+
+### 12. Control Flow Directives (`|continue|` and `|break|`)
+Control loop iterations dynamically within `for` and `each` loops. Supported inside nested `if`, `switch`, and other directives.
+
+```html
+|for i from 1 to 10|
+    |if i == 5|
+        |continue| <!-- Skip remainder of current iteration -->
+    |/if|
+    |if i == 8|
+        |break|    <!-- Terminate loop immediately -->
+    |/if|
+    <span>|i|</span>
+|/for|
+```
+
+* **`|continue|`**: Skips rendering content after it in the current iteration and advances to the next iteration of the nearest enclosing loop.
+* **`|break|`**: Immediately terminates the nearest enclosing loop. Breaking an inner loop leaves outer loops unaffected.
+* **Empty-State `|else|`**: Executes only when the loop performs zero iterations. If a loop executes at least one iteration (even if terminated early by `|break|` or skipping items via `|continue|`), the `|else|` block does not render.
+
+---
+
+### 13. Loop Metadata
+Access iteration state properties (`index`, `count`, `first`, `last`, `total`) using the local `each` scope inside any `each` loop.
 
 ```html
 |each item in items|
@@ -207,7 +257,7 @@ Access iteration state properties (`index`, `count`, `first`, `last`, `total`) u
 
 ---
 
-### 12. Loop Separators
+### 14. Loop Separators
 Render delimiters (like commas, breadcrumb symbols, or HTML dividers) between loop iterations automatically, skipping the final item.
 
 ```html
@@ -217,7 +267,7 @@ Render delimiters (like commas, breadcrumb symbols, or HTML dividers) between lo
 
 ---
 
-### 13. SvelteKit-Style File-Based Routing
+### 15. SvelteKit-Style File-Based Routing
 Zero-code web endpoints generated directly from your directory tree hierarchy, automatically injecting path and query variables.
 
 **Template Path (`src/main/resources/pte-routes/posts/[id]/+page.pte`)**:
@@ -230,7 +280,7 @@ Zero-code web endpoints generated directly from your directory tree hierarchy, a
 
 ---
 
-### 14. Layouts & Yield Sections
+### 16. Layouts & Yield Sections
 Wrap pages inside master templates to reuse headers, sidebars, and scripts.
 
 **Layout File (`layouts/main.pte`)**:
@@ -256,7 +306,7 @@ Wrap pages inside master templates to reuse headers, sidebars, and scripts.
 
 ---
 
-### 15. Components & Named Slots
+### 17. Components & Named Slots
 Define highly reusable interface widgets and pass them rich nested markup slots.
 
 **Component File (`components/card.pte`)**:
@@ -281,7 +331,7 @@ Define highly reusable interface widgets and pass them rich nested markup slots.
 
 ---
 
-### 16. Includes
+### 18. Includes
 Include simple partial template files directly. Supports passing sub-models using the `with` statement.
 
 ```html
@@ -291,7 +341,7 @@ Include simple partial template files directly. Supports passing sub-models usin
 
 ---
 
-### 17. Template-Defined Macros
+### 19. Template-Defined Macros
 Define reusable markup function helpers directly inside your templates or utility files.
 
 ```html
@@ -306,7 +356,7 @@ Define reusable markup function helpers directly inside your templates or utilit
 
 ---
 
-### 18. Inline Template Fragments
+### 20. Inline Template Fragments
 Target and render specific subsections of a template. Excellent for returning lightweight HTML payloads for HTMX updates.
 
 **Template File (`pages/tasks.pte`)**:
@@ -329,7 +379,7 @@ String html = templateEngine.renderFragment("pages/tasks", "list-zone", model);
 
 ---
 
-### 19. Strongly Typed Models
+### 21. Strongly Typed Models
 Explicitly declare your page model type at the top of templates.
 
 ```html
@@ -341,7 +391,7 @@ Explicitly declare your page model type at the top of templates.
 
 ---
 
-### 20. Built-in Pipe Filters
+### 22. Built-in Pipe Filters
 Apply formatter transformations directly to variable output expressions.
 
 ```html
@@ -352,7 +402,7 @@ Apply formatter transformations directly to variable output expressions.
 
 ---
 
-### 21. Conditional Attribute Whitespace Cleanup
+### 23. Conditional Attribute Whitespace Cleanup
 PTE parses surrounding tags and automatically cleans up extra trailing/double whitespaces if a conditional attribute evaluates to false.
 
 ```html
@@ -363,7 +413,7 @@ PTE parses surrounding tags and automatically cleans up extra trailing/double wh
 
 ---
 
-### 22. Circular Include Detection
+### 24. Circular Include Detection
 PTE tracks the active include stack at render-time and throws a compile-time exception if a template attempts to include itself recursively.
 
 ```html
@@ -375,7 +425,7 @@ PTE tracks the active include stack at render-time and throws a compile-time exc
 
 ---
 
-### 23. HTML Minification & Prettifying
+### 25. HTML Minification & Prettifying
 Compress raw templates using the block-level `|minify|` tag, or configure the engine globally to minify or prettify (beautify) all rendered page sources automatically.
 
 ```html
@@ -398,7 +448,7 @@ templateEngine.setPrettify(true);
 
 ---
 
-### 24. Template Comments
+### 26. Template Comments
 Write developer comments inside templates that are completely stripped out at compile time and never outputted to the user's browser.
 
 ```html
@@ -414,7 +464,7 @@ Write developer comments inside templates that are completely stripped out at co
 
 ---
 
-### 25. Route-Level Page Options & Metadata
+### 27. Route-Level Page Options & Metadata
 Configure route-level page properties (`title`, `cache`, `auth`, `roles`, `contentType`) directly inside the template. The Spring Boot starter automatically resolves and enforces these configurations.
 
 ```html
@@ -429,7 +479,7 @@ Configure route-level page properties (`title`, `cache`, `auth`, `roles`, `conte
 
 ---
 
-### 26. Request-Scoped Page Context
+### 28. Request-Scoped Page Context
 Access implicit HTTP request metadata properties (`requestUri`, `method`, `headers`, `params`, `session`) out-of-the-box inside any layout page using the `page` context map.
 
 ```html
@@ -441,7 +491,7 @@ Access implicit HTTP request metadata properties (`requestUri`, `method`, `heade
 
 ---
 
-### 27. Recoverable Rendering (Attempt & Recover)
+### 29. Recoverable Rendering (Attempt & Recover)
 Wrap error-prone layout widgets, database-backed components, or custom scripts inside attempt blocks. If rendering fails, PTE rolls back/discards all partial HTML output generated inside the block, captures the error description into a named variable, and renders the recover fallback block instead.
 
 ```html
@@ -458,7 +508,7 @@ Wrap error-prone layout widgets, database-backed components, or custom scripts i
 
 ---
 
-### 28. Progressive Web App (PWA) Meta & Service Worker Tag
+### 30. Progressive Web App (PWA) Meta & Service Worker Tag
 Abstract mobile viewports, theme colors, iOS app capability, icons, web app manifest links, and service worker registration into a single inline tag:
 
 ```html
@@ -470,7 +520,7 @@ Abstract mobile viewports, theme colors, iOS app capability, icons, web app mani
 
 ---
 
-### 29. HTMX Head & Element Attribute Tags
+### 31. HTMX Head & Element Attribute Tags
 Abstract HTMX library scripts, extension plugins, indicator CSS rules, and HTMX element action attributes into single inline tags.
 
 #### A. HTMX Head Setup Tag (`|htmx ...|`)
@@ -512,7 +562,7 @@ Write HTMX attribute bindings using `|htmx-get ...|`, `|htmx-post ...|`, `|htmx-
 
 ---
 
-### 30. Alpine.js Integration & Reactive State Tags
+### 32. Alpine.js Integration & Reactive State Tags
 Abstract Alpine.js core script tags, plugin CDN references, `x-cloak` CSS rules, and reactive component state declarations into single inline tags.
 
 #### A. Alpine.js Head Setup Tag (`|alpine ...|`)
