@@ -15,11 +15,11 @@
 
 ##  Why Use Piped Template Engine?
 
-1. ** Native Bytecode Performance**: PTE transpiles template AST trees into Java source and compiles them **in-memory** to live `.class` JVM bytecode. It runs at native JVM speed, matching **JTE** and executing **3x–8x faster than Thymeleaf** with zero disk I/O.
-2. ** Rich Control Flow**: First-class support for collection loops (`|each|`), auto-directional numeric range loops (`|for i from 1 to 10 step 2|`), loop control flow (`|continue|`, `|break|`), and empty-state `|else|` fallback blocks.
-3. ** SvelteKit-Style Routing**: Stop writing boilerplate Java `@Controller` mappings just to load static pages. PTE registers routes automatically from your directory structure.
-4. ** Built for HTMX**: Render specific page zones dynamically using inline **Fragments**, compile clean **Target DOM IDs** using the slug filter, and perform out-of-band updates with zero friction.
-5. ** Secure by Default**: Automatically escapes all variables to defend against Cross-Site Scripting (XSS) attacks.
+1. **Native Bytecode Performance**: PTE transpiles template AST trees into Java source and compiles them **in-memory** to live `.class` JVM bytecode. It runs at native JVM speed, matching **JTE** and executing **3x–8x faster than Thymeleaf** with zero disk I/O.
+2. **Rich Control Flow**: First-class support for collection loops (`|each|`), auto-directional numeric range loops (`|for i from 1 to 10 step 2|`), loop control flow (`|continue|`, `|break|`), and empty-state `|else|` fallback blocks.
+3. **SvelteKit-Style Routing**: Stop writing boilerplate Java `@Controller` mappings just to load static pages. PTE registers routes automatically from your directory structure.
+4. **Built for HTMX**: Render specific page zones dynamically using inline **Fragments**, compile clean **Target DOM IDs** using the slug filter, and perform out-of-band updates with zero friction.
+5. **Secure by Default**: Automatically escapes all variables to defend against Cross-Site Scripting (XSS) attacks.
 
 ---
 
