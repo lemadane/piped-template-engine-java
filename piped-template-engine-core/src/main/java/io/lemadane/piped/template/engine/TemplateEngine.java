@@ -241,9 +241,42 @@ public final class TemplateEngine {
         return Collections.unmodifiableMap(values);
     }
 
-    public String renderNamedTemplate(String templateName, Map<String, Object> model, RenderOptions options) {
+    public RenderResult renderTemplateSource(String templateSource, Map<String, Object> model, RenderOptions options) {
+        io.lemadane.piped.template.engine.compiler.CompiledTemplate compiled = compile(templateSource);
+        Map<String, Object> metadata = compiled.getMetadata();
+        ExecutionMode executionMode = getExecutionMode();
+
+        TemplateContext.EngineRenderDelegate delegate = new TemplateContext.EngineRenderDelegate() {
+            @Override
+            public String renderStringWithContext(String templateContent, TemplateContext context) {
+                return TemplateEngine.this.renderStringWithContext(templateContent, context);
+            }
+
+            @Override
+            public String renderComponentTemplate(String templateContent, TemplateContext context) {
+                return TemplateEngine.this.renderComponentTemplate(templateContent, context);
+            }
+        };
+
+        TemplateContext context = new TemplateContext(model)
+                .withResolver(templateSourceResolver)
+                .withEngine(delegate);
+
+        String html = renderStringWithContext(templateSource, context, options);
+        return new RenderResult(html, metadata, executionMode);
+    }
+
+    public RenderResult renderTemplateSource(String templateSource, Map<String, Object> model) {
+        return renderTemplateSource(templateSource, model, RenderOptions.DEFAULT);
+    }
+
+    public RenderResult renderNamedTemplate(String templateName, Map<String, Object> model, RenderOptions options) {
         TemplateSource source = templateSourceResolver.resolve(templateName);
-        return renderStringWithResolver(source.getContent(), model, templateSourceResolver, options);
+        return renderTemplateSource(source.getContent(), model, options);
+    }
+
+    public RenderResult renderNamedTemplate(String templateName, Map<String, Object> model) {
+        return renderNamedTemplate(templateName, model, RenderOptions.DEFAULT);
     }
 
     public String renderNamedTemplate(String templateName, TemplateContext context) {
@@ -276,9 +309,9 @@ public final class TemplateEngine {
             }
         }
         if (source != null) {
-            return renderStringWithResolver(source.getContent(), values, templateSourceResolver, RenderOptions.DEFAULT);
+            return renderNamedTemplate(templateOrTemplateName, values).html();
         }
-        return renderString(templateOrTemplateName, values);
+        return renderTemplateSource(templateOrTemplateName, values).html();
     }
 
     public String renderString(String template, Map<String, Object> values) {

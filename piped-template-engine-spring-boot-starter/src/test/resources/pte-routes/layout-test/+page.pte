@@ -1,0 +1,9 @@
+|layout layouts/simple-main|
+
+|section title|
+Dashboard
+|/section|
+
+|section content|
+<h1>Hello</h1>
+|/section|

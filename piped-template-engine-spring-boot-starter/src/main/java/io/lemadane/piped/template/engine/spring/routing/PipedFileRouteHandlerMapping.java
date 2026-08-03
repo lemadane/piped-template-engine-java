@@ -1,8 +1,10 @@
 package io.lemadane.piped.template.engine.spring.routing;
 
+import io.lemadane.piped.template.engine.RenderResult;
 import io.lemadane.piped.template.engine.TemplateEngine;
 import io.lemadane.piped.template.engine.compiler.CompiledTemplate;
 import io.lemadane.piped.template.engine.spring.PipedPageContext;
+import io.lemadane.piped.template.engine.spring.PipedResponseMetadataApplicator;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
 import org.springframework.web.HttpRequestHandler;
@@ -15,6 +17,7 @@ public class PipedFileRouteHandlerMapping extends AbstractUrlHandlerMapping {
 
     final TemplateEngine templateEngine;
     final Map<String, PageDataLoader> dataLoaders = new HashMap<>();
+    final PipedResponseMetadataApplicator metadataApplicator = new PipedResponseMetadataApplicator();
 
     public PipedFileRouteHandlerMapping(TemplateEngine templateEngine) {
         this.templateEngine = templateEngine;
@@ -68,10 +71,10 @@ public class PipedFileRouteHandlerMapping extends AbstractUrlHandlerMapping {
             try {
                 String templateContent = new String(resource.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
                 CompiledTemplate compiled = templateEngine.compile(templateContent);
-                Map<String, Object> metadata = compiled.getMetadata();
+                Map<String, Object> initialMetadata = compiled.getMetadata();
 
                 // Enforce auth check
-                if (Boolean.TRUE.equals(metadata.get("auth"))) {
+                if (Boolean.TRUE.equals(initialMetadata.get("auth"))) {
                     if (request.getUserPrincipal() == null) {
                         response.sendError(401, "Unauthorized");
                         return;
@@ -79,8 +82,8 @@ public class PipedFileRouteHandlerMapping extends AbstractUrlHandlerMapping {
                 }
 
                 // Enforce roles check
-                if (metadata.containsKey("roles")) {
-                    Object rolesObj = metadata.get("roles");
+                if (initialMetadata.containsKey("roles")) {
+                    Object rolesObj = initialMetadata.get("roles");
                     List<String> requiredRoles;
                     if (rolesObj instanceof List) {
                         requiredRoles = (List<String>) rolesObj;
@@ -125,23 +128,21 @@ public class PipedFileRouteHandlerMapping extends AbstractUrlHandlerMapping {
                     model.put("page", new PipedPageContext(request));
                 }
 
+                RenderResult result = templateEngine.renderTemplateSource(templateContent, model);
+                Map<String, Object> metadata = result.metadata();
+
                 if (metadata.containsKey("title") && !model.containsKey("title")) {
                     model.put("title", metadata.get("title"));
                 }
 
-                // Apply custom Cache-Control header
-                if (metadata.containsKey("cache")) {
-                    response.setHeader("Cache-Control", String.valueOf(metadata.get("cache")));
+                // Apply custom headers via shared applicator
+                metadataApplicator.apply(metadata, response);
+
+                if (!metadata.containsKey("contentType")) {
+                    response.setContentType("text/html;charset=UTF-8");
                 }
 
-                // Apply custom Content-Type
-                String contentType = metadata.containsKey("contentType")
-                        ? String.valueOf(metadata.get("contentType"))
-                        : "text/html;charset=UTF-8";
-                response.setContentType(contentType);
-
-                String html = compiled.renderToString(new io.lemadane.piped.template.engine.expression.TemplateContext(model));
-                response.getWriter().write(html);
+                response.getWriter().write(result.html());
             } catch (Exception e) {
                 response.sendError(500, e.getMessage());
             }

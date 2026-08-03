@@ -1,0 +1,50 @@
+|page title = "Dashboard"|
+|page contentType = "text/html;charset=UTF-8"|
+|page cache = "no-store"|
+|page hxTrigger = "dashboardUpdated"|
+|page hxRedirect = "/login"|
+|page hxPushUrl = "/dashboard"|
+|page hxRefresh = true|
+|layout layouts/parity-main|
+
+|section title|
+|title|
+|/section|
+
+|section content|
+<h1>Welcome |user.name|</h1>
+|if user.admin|
+<p>Admin Panel</p>
+|else|
+<p>User Panel</p>
+|/if|
+|for i from 1 to 3|
+<span>Item |i|</span>
+|/for|
+|each item in items|
+<div>|item|</div>
+|/each|
+|switch user.role|
+|case 'ADMIN'|
+<div>Role: Admin</div>
+|default|
+<div>Role: Guest</div>
+|/switch|
+|component components/parity-card with product|
+|slot header|
+Featured Product
+|/slot|
+|/component|
+|macro badge(label)|
+<span class="badge">|label|</span>
+|/macro|
+|call badge('Active')|
+|attempt|
+<p>Attempt content</p>
+|recover|
+<p>Recover content</p>
+|/attempt|
+|pwa appName="ParityApp" manifest="/manifest.json"|
+|htmx get="/api/data" target="#main"|
+|alpine state={count: 1}|
+|/section|

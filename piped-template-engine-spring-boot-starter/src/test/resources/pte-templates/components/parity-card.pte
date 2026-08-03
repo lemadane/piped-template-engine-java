@@ -1,0 +1,4 @@
+<div class="card">
+    <h3>|slot header|</h3>
+    <p>|name| - |price|</p>
+</div>

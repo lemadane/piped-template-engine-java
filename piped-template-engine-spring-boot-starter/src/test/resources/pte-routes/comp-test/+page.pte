@@ -1,0 +1,5 @@
+|component components/simple-card with product|
+|slot header|
+Product Details
+|/slot|
+|/component|
