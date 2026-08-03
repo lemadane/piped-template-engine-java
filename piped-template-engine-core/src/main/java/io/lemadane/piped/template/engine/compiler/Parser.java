@@ -49,6 +49,10 @@ public final class Parser {
                 break;
             }
 
+            if (attemptDepth > 0 && (token.type() == TokenType.RECOVER || token.type() == TokenType.END_ATTEMPT)) {
+                break;
+            }
+
             if (token.type() == TokenType.ELSE || token.type() == TokenType.ELSE_IF) {
                 break;
             }
@@ -70,6 +74,8 @@ public final class Parser {
                 case DEFAULT -> throw new TemplateSyntaxException("Unexpected |default| without matching |switch|.");
                 case FALLTHROUGH -> nodes.add(new io.lemadane.piped.template.engine.ast.FallthroughNode());
                 case END_SWITCH -> throw new TemplateSyntaxException("Unexpected |/switch| without matching |switch|.");
+                case RECOVER -> throw new TemplateSyntaxException("Unexpected |recover| without matching |attempt|.");
+                case END_ATTEMPT -> throw new TemplateSyntaxException("Unexpected |/attempt| without matching |attempt|.");
                 case BREAK -> {
                     if (loopDepth == 0) {
                         throw new TemplateSyntaxException("|break| is only allowed inside a loop.");
@@ -458,26 +464,38 @@ public final class Parser {
         return str;
     }
 
+    private int attemptDepth = 0;
+
     private io.lemadane.piped.template.engine.ast.AttemptNode parseAttempt(Token attemptToken, Cursor cursor) {
-        ASTNode body = parseBlock(cursor, TokenType.RECOVER);
+        attemptDepth++;
+        try {
+            ASTNode body = parseBlock(cursor, null);
 
-        if (!cursor.hasNext() || cursor.peek().type() != TokenType.RECOVER) {
-            throw new TemplateSyntaxException("Missing matching |recover| block inside |attempt|.");
+            ASTNode recoverBlock = null;
+            String errorVarName = null;
+
+            if (cursor.hasNext() && cursor.peek().type() == TokenType.RECOVER) {
+                Token recoverToken = cursor.next();
+                String val = recoverToken.value().substring("recover".length()).trim();
+                if (val.startsWith("as ")) {
+                    errorVarName = val.substring("as ".length()).trim();
+                } else if (!val.isEmpty()) {
+                    throw new TemplateSyntaxException("Invalid recover directive syntax: " + recoverToken.value());
+                }
+
+                recoverBlock = parseBlock(cursor, TokenType.END_ATTEMPT);
+            }
+
+            if (cursor.hasNext() && cursor.peek().type() == TokenType.END_ATTEMPT) {
+                cursor.next();
+            } else {
+                throw new TemplateSyntaxException("Missing closing |/attempt|.");
+            }
+
+            return new io.lemadane.piped.template.engine.ast.AttemptNode(body, recoverBlock, errorVarName);
+        } finally {
+            attemptDepth--;
         }
-
-        Token recoverToken = cursor.next();
-        String errorVarName = null;
-        String val = recoverToken.value().substring("recover".length()).trim();
-        if (val.startsWith("as ")) {
-            errorVarName = val.substring("as ".length()).trim();
-        }
-
-        ASTNode recoverBlock = parseBlock(cursor, TokenType.END_ATTEMPT);
-        if (cursor.hasNext() && cursor.peek().type() == TokenType.END_ATTEMPT) {
-            cursor.next();
-        }
-
-        return new io.lemadane.piped.template.engine.ast.AttemptNode(body, recoverBlock, errorVarName);
     }
 
     private PWANode parsePWA(Token token) {

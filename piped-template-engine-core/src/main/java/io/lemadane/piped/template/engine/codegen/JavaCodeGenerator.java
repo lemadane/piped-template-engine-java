@@ -89,6 +89,10 @@ public final class JavaCodeGenerator {
             sb.append(indent).append("    try {\n");
             generateNodeSource(attemptNode.getBody(), sb, indent + "        ");
             sb.append(indent).append("        prevWriter.write(sw.toString());\n");
+            sb.append(indent).append("    } catch (io.lemadane.piped.template.engine.exceptions.LoopContinueException e) {\n");
+            sb.append(indent).append("        throw e;\n");
+            sb.append(indent).append("    } catch (io.lemadane.piped.template.engine.exceptions.LoopBreakException e) {\n");
+            sb.append(indent).append("        throw e;\n");
             sb.append(indent).append("    } catch (Exception e) {\n");
             if (attemptNode.getRecoverBlock() != null) {
                 sb.append(indent).append("        io.lemadane.piped.template.engine.expression.TemplateContext nextCtx = context;\n");

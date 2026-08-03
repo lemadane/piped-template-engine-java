@@ -34,6 +34,8 @@ public final class AttemptNode implements ASTNode {
         try {
             body.render(context, sw);
             writer.write(sw.toString());
+        } catch (io.lemadane.piped.template.engine.exceptions.LoopContinueException | io.lemadane.piped.template.engine.exceptions.LoopBreakException e) {
+            throw e;
         } catch (Exception e) {
             if (recoverBlock != null) {
                 TemplateContext nextContext = context;

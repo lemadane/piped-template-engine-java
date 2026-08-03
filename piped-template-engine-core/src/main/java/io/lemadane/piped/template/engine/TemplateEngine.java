@@ -619,6 +619,8 @@ public final class TemplateEngine {
                             closingPipeIndex + 1,
                             attemptBlock.attemptBodyEndIndex());
                     output.append(attemptHtml);
+                } catch (io.lemadane.piped.template.engine.exceptions.LoopContinueException | io.lemadane.piped.template.engine.exceptions.LoopBreakException e) {
+                    throw e;
                 } catch (Exception e) {
                     if (attemptBlock.hasRecover()) {
                         TemplateContext nextContext = context;
