@@ -1,0 +1,14 @@
+{
+   "java.configuration.updateBuildConfiguration": "automatic",
+   "java.compile.nullAnalysis.mode": "automatic",
+   "files.associations": {
+      "*.pte": "html"
+   },
+   "emmet.includeLanguages": {
+      "pte": "html",
+      "html": "html"
+   },
+   "editor.quickSuggestions": {
+      "strings": true
+   }
+}

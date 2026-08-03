@@ -1,39 +1,80 @@
-# Gradle
+# ==============================================================================
+# Gradle & Build Output
+# ==============================================================================
 .gradle/
 build/
+out/
+bin/
 
-# Java compiled files
-*.class
-
-# Logs
-*.log
-
-# IDEs / editors
+# ==============================================================================
+# IDE & Editor Configurations
+# ==============================================================================
+# IntelliJ IDEA
 .idea/
-.vscode/
 *.iml
+*.ipr
+*.iws
 
-# OS files
-.DS_Store
-Thumbs.db
+# Eclipse
+.classpath
+.project
+.settings/
+.factorypath
 
-# Temporary files
-*.tmp
-*.temp
+# VS Code
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.code-workspace
+
+# Text Editors / Crash Logs
 *.swp
 *.swo
+*~
 
-# Local environment files
-.env
-.env.*
-!.env.example
+# ==============================================================================
+# OS Generated Files
+# ==============================================================================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
 
-# Generated archives
+# ==============================================================================
+# Java Archives & Executables
+# ==============================================================================
+*.class
 *.jar
-!gradle/wrapper/gradle-wrapper.jar
+!.gradle/wrapper/gradle-wrapper.jar
 *.war
 *.ear
+*.nar
 
-# Test / coverage reports
+# ==============================================================================
+# Logs & Temporary Files
+# ==============================================================================
+*.log
+logs/
+*.tmp
+*.temp
+*.bak
+
+# ==============================================================================
+# Local Environment & Secrets
+# ==============================================================================
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# ==============================================================================
+# Test & Coverage Reports
+# ==============================================================================
 reports/
 coverage/
+.output/
