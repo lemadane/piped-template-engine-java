@@ -1,6 +1,6 @@
 # Piped Template Engine (PTE)
 
-[![JitPack](https://jitpack.io/v/lemadane/piped-template-engine.svg)](https://jitpack.io/#lemadane/piped-template-engine)
+[![JitPack](https://jitpack.io/v/lemadane/piped-template-engine-java.svg)](https://jitpack.io/#lemadane/piped-template-engine-java)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
 [![Java 17+](https://img.shields.io/badge/Java-17%2B-blue.svg)](https://www.oracle.com/java/)
 
@@ -36,7 +36,7 @@ repositories {
 
 dependencies {
     // Spring Boot Starter (auto-configures view mapping)
-    implementation 'com.github.lemadane.piped-template-engine:piped-template-engine-spring-boot-starter:0.1.1'
+    implementation 'com.github.lemadane.piped-template-engine-java:piped-template-engine-spring-boot-starter:0.1.1'
 }
 ```
 

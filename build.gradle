@@ -2,7 +2,7 @@ subprojects {
     apply plugin: 'java'
     apply plugin: 'java-library'
 
-    group = 'com.github.lemadane'
+    group = 'com.github.lemadane.piped-template-engine-java'
     version = '0.1.1'
 
     java {
