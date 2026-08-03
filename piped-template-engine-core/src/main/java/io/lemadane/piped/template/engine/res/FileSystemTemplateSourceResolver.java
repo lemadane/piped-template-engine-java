@@ -24,19 +24,39 @@ public final class FileSystemTemplateSourceResolver implements TemplateSourceRes
         this.suffix = suffix != null ? suffix : "";
     }
 
+    static String decodeAndNormalize(String name) {
+        if (name == null || name.isEmpty()) {
+            return "";
+        }
+        String path = name;
+        if (path.startsWith("file:")) {
+            path = path.substring("file:".length());
+        }
+        try {
+            path = java.net.URLDecoder.decode(path, StandardCharsets.UTF_8);
+        } catch (Exception ignored) {
+        }
+        return path.replace('\\', '/');
+    }
+
     @Override
     public TemplateSource resolve(String name) throws TemplateNotFoundException {
         if (name == null || name.isEmpty()) {
             throw new TemplateNotFoundException("Template name cannot be empty");
         }
 
-        String pathName = name;
-        if (pathName.startsWith("file:")) {
-            pathName = pathName.substring("file:".length());
-        }
-
+        String pathName = decodeAndNormalize(name);
         if (pathName.contains("..")) {
             throw new TemplateNotFoundException("Directory traversal forbidden: " + name);
+        }
+
+        boolean isAbs = false;
+        try {
+            isAbs = Paths.get(pathName).isAbsolute();
+        } catch (Exception ignored) {
+        }
+        if (isAbs || pathName.startsWith("/")) {
+            throw new TemplateNotFoundException("Absolute path forbidden: " + name);
         }
 
         if (!suffix.isEmpty() && !pathName.endsWith(suffix) && !pathName.endsWith(".html") && !pathName.endsWith(".pte")) {

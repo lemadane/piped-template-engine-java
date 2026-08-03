@@ -33,34 +33,46 @@ public final class ClasspathTemplateSourceResolver implements TemplateSourceReso
         this.classLoader = classLoader != null ? classLoader : ClasspathTemplateSourceResolver.class.getClassLoader();
     }
 
+    static String decodeAndNormalize(String name) {
+        if (name == null || name.isEmpty()) {
+            return "";
+        }
+        String path = name;
+        if (path.startsWith("classpath:")) {
+            path = path.substring("classpath:".length());
+        }
+        try {
+            path = java.net.URLDecoder.decode(path, StandardCharsets.UTF_8);
+        } catch (Exception ignored) {
+        }
+        return path.replace('\\', '/');
+    }
+
     @Override
     public TemplateSource resolve(String name) throws TemplateNotFoundException {
         if (name == null || name.isEmpty()) {
             throw new TemplateNotFoundException("Template name cannot be empty");
         }
 
-        String path = name;
-        if (path.startsWith("classpath:")) {
-            path = path.substring("classpath:".length());
-        }
-
+        String path = decodeAndNormalize(name);
         if (path.contains("..")) {
             throw new TemplateNotFoundException("Directory traversal forbidden: " + name);
         }
 
-        String fullPath;
-        if (path.startsWith("/")) {
-            fullPath = path;
-        } else {
-            fullPath = prefix + path;
+        while (path.startsWith("/")) {
+            path = path.substring(1);
         }
 
+        String fullPath = prefix + path;
         if (!suffix.isEmpty() && !fullPath.endsWith(suffix) && !fullPath.endsWith(".html") && !fullPath.endsWith(".pte")) {
             fullPath = fullPath + suffix;
         }
 
-        // Clean leading slash for ClassLoader resource lookup if needed
         String resourcePath = fullPath.startsWith("/") ? fullPath.substring(1) : fullPath;
+        String prefixClean = prefix.startsWith("/") ? prefix.substring(1) : prefix;
+        if (!resourcePath.startsWith(prefixClean)) {
+            throw new TemplateNotFoundException("Access outside template namespace forbidden: " + name);
+        }
 
         try (InputStream is = classLoader.getResourceAsStream(resourcePath)) {
             if (is == null) {

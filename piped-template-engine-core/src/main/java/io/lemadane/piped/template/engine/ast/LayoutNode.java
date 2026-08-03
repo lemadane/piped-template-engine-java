@@ -38,9 +38,8 @@ public final class LayoutNode implements ASTNode {
             sectionMap.putIfAbsent("", defaultBody);
         }
 
-        if (context.getResolver() != null && context.getEngine() != null) {
-            String layoutContent = context.getResolver().resolve(layoutPath).getContent();
-            String rendered = context.getEngine().renderStringWithContext(layoutContent, childContext);
+        if (context.getEngine() != null) {
+            String rendered = context.getEngine().renderNamedTemplate(layoutPath, childContext);
             writer.write(rendered);
         } else {
             throw new io.lemadane.piped.template.engine.exceptions.TemplateRenderException("Unable to resolve layout template: " + layoutPath);

@@ -150,8 +150,28 @@ public final class TemplateContext {
     @FunctionalInterface
     public interface EngineRenderDelegate {
         String renderStringWithContext(String templateContent, TemplateContext context);
+        default String renderNamedTemplate(String templateName, TemplateContext context) {
+            if (context.getResolver() != null) {
+                try {
+                    String content = context.getResolver().resolve(templateName).getContent();
+                    return renderStringWithContext(content, context);
+                } catch (Exception ignored) {
+                }
+            }
+            return renderStringWithContext(templateName, context);
+        }
         default String renderComponentTemplate(String templateContent, TemplateContext context) {
             return renderStringWithContext(templateContent, context);
+        }
+        default String renderNamedComponent(String componentName, TemplateContext context) {
+            if (context.getResolver() != null) {
+                try {
+                    String content = context.getResolver().resolve(componentName).getContent();
+                    return renderComponentTemplate(content, context);
+                } catch (Exception ignored) {
+                }
+            }
+            return renderComponentTemplate(componentName, context);
         }
     }
 }

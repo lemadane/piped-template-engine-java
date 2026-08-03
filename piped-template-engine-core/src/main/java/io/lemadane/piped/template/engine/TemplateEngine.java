@@ -241,34 +241,112 @@ public final class TemplateEngine {
         return Collections.unmodifiableMap(values);
     }
 
-    public RenderResult renderTemplateSource(String templateSource, Map<String, Object> model, RenderOptions options) {
-        io.lemadane.piped.template.engine.compiler.CompiledTemplate compiled = compile(templateSource);
-        Map<String, Object> metadata = compiled.getMetadata();
-        ExecutionMode executionMode = getExecutionMode();
+    static final int MAX_NESTING_DEPTH = 50;
+    final ThreadLocal<Boolean> topLevelRenderGuard = new ThreadLocal<>();
 
-        Map<String, Object> effectiveModel = new HashMap<>(model != null ? model : Map.of());
-        if (metadata.containsKey("title") && !effectiveModel.containsKey("title")) {
-            effectiveModel.put("title", metadata.get("title"));
+    void pushTemplateScope(String rawTemplateName) {
+        if (rawTemplateName == null || rawTemplateName.isBlank()) {
+            return;
         }
+        String normalized = normalizeTemplateName(rawTemplateName);
+        ArrayDeque<String> stack = templateStack.get();
+        if (stack.contains(normalized)) {
+            List<String> cycleList = new ArrayList<>(stack);
+            cycleList.add(normalized);
+            String cycleChain = String.join(" -> ", cycleList);
+            throw new io.lemadane.piped.template.engine.exceptions.TemplateCircularDependencyException(
+                    "Circular template dependency (Circular include detected): " + cycleChain);
+        }
+        if (stack.size() >= MAX_NESTING_DEPTH) {
+            throw new TemplateRenderException("Maximum template nesting depth exceeded: " + MAX_NESTING_DEPTH);
+        }
+        stack.addLast(normalized);
+    }
 
-        TemplateContext.EngineRenderDelegate delegate = new TemplateContext.EngineRenderDelegate() {
-            @Override
-            public String renderStringWithContext(String templateContent, TemplateContext context) {
-                return TemplateEngine.this.renderStringWithContext(templateContent, context);
+    void popTemplateScope(String rawTemplateName) {
+        if (rawTemplateName == null || rawTemplateName.isBlank()) {
+            return;
+        }
+        ArrayDeque<String> stack = templateStack.get();
+        if (!stack.isEmpty()) {
+            stack.removeLast();
+        }
+    }
+
+    <T> T executeWithRenderScope(String templateName, java.util.function.Supplier<T> action) {
+        boolean isTopLevel = (topLevelRenderGuard.get() == null);
+        if (isTopLevel) {
+            topLevelRenderGuard.set(Boolean.TRUE);
+            templateStack.get().clear();
+            sectionStack.get().clear();
+            slotStack.get().clear();
+            loopDepth.set(0);
+        }
+        boolean pushed = false;
+        if (templateName != null && !templateName.isBlank()) {
+            pushTemplateScope(templateName);
+            pushed = true;
+        }
+        try {
+            return action.get();
+        } finally {
+            if (pushed) {
+                popTemplateScope(templateName);
+            }
+            if (isTopLevel) {
+                topLevelRenderGuard.remove();
+                templateStack.remove();
+                sectionStack.remove();
+                slotStack.remove();
+                loopDepth.remove();
+            }
+        }
+    }
+
+    public RenderResult renderTemplateSource(String templateSource, Map<String, Object> model, RenderOptions options) {
+        return renderTemplateSourceInternal(null, templateSource, model, options);
+    }
+
+    RenderResult renderTemplateSourceInternal(String templateName, String templateSource, Map<String, Object> model, RenderOptions options) {
+        return executeWithRenderScope(templateName, () -> {
+            io.lemadane.piped.template.engine.compiler.CompiledTemplate compiled = compile(templateSource);
+            Map<String, Object> metadata = compiled.getMetadata();
+            ExecutionMode executionMode = getExecutionMode();
+
+            Map<String, Object> effectiveModel = new HashMap<>(model != null ? model : Map.of());
+            if (metadata.containsKey("title") && !effectiveModel.containsKey("title")) {
+                effectiveModel.put("title", metadata.get("title"));
             }
 
-            @Override
-            public String renderComponentTemplate(String templateContent, TemplateContext context) {
-                return TemplateEngine.this.renderComponentTemplate(templateContent, context);
-            }
-        };
+            TemplateContext.EngineRenderDelegate delegate = new TemplateContext.EngineRenderDelegate() {
+                @Override
+                public String renderStringWithContext(String templateContent, TemplateContext context) {
+                    return TemplateEngine.this.renderStringWithContext(templateContent, context);
+                }
 
-        TemplateContext context = new TemplateContext(effectiveModel)
-                .withResolver(templateSourceResolver)
-                .withEngine(delegate);
+                @Override
+                public String renderNamedTemplate(String templateName, TemplateContext context) {
+                    return TemplateEngine.this.renderNamedTemplate(templateName, context);
+                }
 
-        String html = renderStringWithContext(templateSource, context, options);
-        return new RenderResult(html, metadata, executionMode);
+                @Override
+                public String renderComponentTemplate(String templateContent, TemplateContext context) {
+                    return TemplateEngine.this.renderComponentTemplate(templateContent, context);
+                }
+
+                @Override
+                public String renderNamedComponent(String componentName, TemplateContext context) {
+                    return TemplateEngine.this.renderNamedComponent(componentName, context);
+                }
+            };
+
+            TemplateContext context = new TemplateContext(effectiveModel)
+                    .withResolver(templateSourceResolver)
+                    .withEngine(delegate);
+
+            String html = renderStringWithContext(templateSource, context, options);
+            return new RenderResult(html, metadata, executionMode);
+        });
     }
 
     public RenderResult renderTemplateSource(String templateSource, Map<String, Object> model) {
@@ -277,7 +355,7 @@ public final class TemplateEngine {
 
     public RenderResult renderNamedTemplate(String templateName, Map<String, Object> model, RenderOptions options) {
         TemplateSource source = templateSourceResolver.resolve(templateName);
-        return renderTemplateSource(source.getContent(), model, options);
+        return renderTemplateSourceInternal(templateName, source.getContent(), model, options);
     }
 
     public RenderResult renderNamedTemplate(String templateName, Map<String, Object> model) {
@@ -285,24 +363,49 @@ public final class TemplateEngine {
     }
 
     public String renderNamedTemplate(String templateName, TemplateContext context) {
-        TemplateSource source = templateSourceResolver.resolve(templateName);
-        if (context.getResolver() == null) {
-            context = context.withResolver(templateSourceResolver);
-        }
-        if (context.getEngine() == null) {
-            TemplateContext.EngineRenderDelegate delegate = new TemplateContext.EngineRenderDelegate() {
-                @Override
-                public String renderStringWithContext(String templateContent, TemplateContext context) {
-                    return TemplateEngine.this.renderStringWithContext(templateContent, context);
-                }
-                @Override
-                public String renderComponentTemplate(String templateContent, TemplateContext context) {
-                    return TemplateEngine.this.renderComponentTemplate(templateContent, context);
-                }
-            };
-            context = context.withEngine(delegate);
-        }
-        return renderStringWithContext(source.getContent(), context);
+        return executeWithRenderScope(templateName, () -> {
+            TemplateSource source = templateSourceResolver.resolve(templateName);
+            TemplateContext ctx = context;
+            if (ctx.getResolver() == null) {
+                ctx = ctx.withResolver(templateSourceResolver);
+            }
+            if (ctx.getEngine() == null) {
+                TemplateContext.EngineRenderDelegate delegate = new TemplateContext.EngineRenderDelegate() {
+                    @Override
+                    public String renderStringWithContext(String templateContent, TemplateContext context) {
+                        return TemplateEngine.this.renderStringWithContext(templateContent, context);
+                    }
+
+                    @Override
+                    public String renderNamedTemplate(String templateName, TemplateContext context) {
+                        return TemplateEngine.this.renderNamedTemplate(templateName, context);
+                    }
+
+                    @Override
+                    public String renderComponentTemplate(String templateContent, TemplateContext context) {
+                        return TemplateEngine.this.renderComponentTemplate(templateContent, context);
+                    }
+
+                    @Override
+                    public String renderNamedComponent(String componentName, TemplateContext context) {
+                        return TemplateEngine.this.renderNamedComponent(componentName, context);
+                    }
+                };
+                ctx = ctx.withEngine(delegate);
+            }
+            return renderStringWithContext(source.getContent(), ctx);
+        });
+    }
+
+    public String renderNamedComponent(String componentName, TemplateContext context) {
+        return executeWithRenderScope(componentName, () -> {
+            TemplateSource source = templateSourceResolver.resolve(componentName);
+            TemplateContext ctx = context;
+            if (ctx.getResolver() == null) {
+                ctx = ctx.withResolver(templateSourceResolver);
+            }
+            return renderComponentTemplate(source.getContent(), ctx);
+        });
     }
 
     public String render(String templateOrTemplateName, Map<String, Object> values) {
@@ -329,9 +432,20 @@ public final class TemplateEngine {
             public String renderStringWithContext(String templateContent, TemplateContext context) {
                 return TemplateEngine.this.renderStringWithContext(templateContent, context);
             }
+
+            @Override
+            public String renderNamedTemplate(String templateName, TemplateContext context) {
+                return TemplateEngine.this.renderNamedTemplate(templateName, context);
+            }
+
             @Override
             public String renderComponentTemplate(String templateContent, TemplateContext context) {
                 return TemplateEngine.this.renderComponentTemplate(templateContent, context);
+            }
+
+            @Override
+            public String renderNamedComponent(String componentName, TemplateContext context) {
+                return TemplateEngine.this.renderNamedComponent(componentName, context);
             }
         };
         TemplateContext context = new TemplateContext(values)
@@ -357,25 +471,27 @@ public final class TemplateEngine {
     }
 
     public String renderStringWithContext(String template, TemplateContext context, RenderOptions options) {
-        var executable = compileToBytecode(template);
-        java.io.StringWriter writer = new java.io.StringWriter();
-        try {
-            executable.render(context, writer, this);
-        } catch (IOException e) {
-            throw new TemplateRenderException("Failed to render template execution", e);
-        }
-        String output = writer.toString();
+        return executeWithRenderScope(null, () -> {
+            var executable = compileToBytecode(template);
+            java.io.StringWriter writer = new java.io.StringWriter();
+            try {
+                executable.render(context, writer, this);
+            } catch (IOException e) {
+                throw new TemplateRenderException("Failed to render template execution", e);
+            }
+            String output = writer.toString();
 
-        boolean useMinify = options.minify() || this.minify;
-        boolean usePrettify = options.prettify() || this.prettify;
+            boolean useMinify = options.minify() || this.minify;
+            boolean usePrettify = options.prettify() || this.prettify;
 
-        if (useMinify) {
-            output = io.lemadane.piped.template.engine.utils.HtmlFormatter.minifyHtml(output);
-        } else if (usePrettify) {
-            output = io.lemadane.piped.template.engine.utils.HtmlFormatter.prettifyHtml(output);
-        }
+            if (useMinify) {
+                output = io.lemadane.piped.template.engine.utils.HtmlFormatter.minifyHtml(output);
+            } else if (usePrettify) {
+                output = io.lemadane.piped.template.engine.utils.HtmlFormatter.prettifyHtml(output);
+            }
 
-        return output;
+            return output;
+        });
     }
 
     public String loadTemplateSource(String templateOrTemplateName) {

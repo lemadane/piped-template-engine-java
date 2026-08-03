@@ -41,17 +41,10 @@ public final class IncludeNode implements ASTNode {
         }
 
         TemplateSourceResolver resolver = context.getResolver();
-        if (resolver != null) {
-            String content = resolver.resolve(templatePath).getContent();
-            if (context.getEngine() != null) {
-                if (context.getActiveIncludes().contains(templatePath) || context.getActiveIncludes().contains(templatePath + ".pte")) {
-                    throw new io.lemadane.piped.template.engine.exceptions.TemplateRenderException("Circular include detected: " + templatePath);
-                }
-                TemplateContext nextWithInc = nextContext.withInclude(templatePath);
-                String rendered = context.getEngine().renderStringWithContext(content, nextWithInc);
-                writer.write(rendered);
-                return;
-            }
+        if (resolver != null && context.getEngine() != null) {
+            String rendered = context.getEngine().renderNamedTemplate(templatePath, nextContext);
+            writer.write(rendered);
+            return;
         }
         throw new io.lemadane.piped.template.engine.exceptions.TemplateRenderException("Unable to resolve include template: " + templatePath);
     }

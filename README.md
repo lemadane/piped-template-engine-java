@@ -36,7 +36,7 @@ repositories {
 
 dependencies {
     // Spring Boot Starter (auto-configures view mapping)
-    implementation 'com.github.lemadane.piped-template-engine:piped-template-engine-spring-boot-starter:v0.1.1'
+    implementation 'com.github.lemadane.piped-template-engine:piped-template-engine-spring-boot-starter:0.1.1'
 }
 ```
 
@@ -44,13 +44,16 @@ dependencies {
 Add your template location rules in `src/main/resources/application.properties`:
 
 ```properties
-# Custom prefix folder (Defaults to pte-templates)
-piped.template.prefix=src/main/resources/pte-templates
-piped.template.suffix=.pte
+# Classpath-based defaults suitable for executable Spring Boot JARs
+spring.pipedtemplate.prefix=classpath:/pte-templates/
+spring.pipedtemplate.suffix=.pte
+spring.pipedtemplate.fail-fast=true
 ```
 
+> **Note**: For production deployments (including packaged executable JARs), use `classpath:/...` paths rather than filesystem paths like `src/main/resources/...`.
+
 ### 3. File-Based Routing vs. Controllers
-PTE lets you use both standard Spring MVC controllers and automatic file-based routes:
+PTE lets you use both standard Spring MVC controllers and automatic file-based routes with complete rendering parity:
 
 * **Option A: SvelteKit-Style File-Based Routing (Zero Java Code)**
   Create `src/main/resources/pte-routes/about/+page.pte`. Navigating to `/about` will render it instantly.

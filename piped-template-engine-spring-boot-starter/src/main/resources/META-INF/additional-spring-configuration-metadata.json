@@ -1,0 +1,24 @@
+{
+  "properties": [
+    {
+      "name": "spring.pipedtemplate.prefix",
+      "type": "java.lang.String",
+      "description": "Prefix path for template resolution (defaults to classpath:/pte-templates/)."
+    },
+    {
+      "name": "spring.pipedtemplate.suffix",
+      "type": "java.lang.String",
+      "description": "Suffix extension for template resolution (defaults to .pte)."
+    },
+    {
+      "name": "spring.pipedtemplate.order",
+      "type": "java.lang.Integer",
+      "description": "View resolver order for Spring MVC."
+    },
+    {
+      "name": "spring.pipedtemplate.fail-fast",
+      "type": "java.lang.Boolean",
+      "description": "Whether route discovery errors cause application startup to fail."
+    }
+  ]
+}

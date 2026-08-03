@@ -59,8 +59,7 @@ public final class ComponentNode implements ASTNode {
         }
 
         if (context.getResolver() != null && context.getEngine() != null) {
-            String compContent = context.getResolver().resolve(componentPath).getContent();
-            String rendered = context.getEngine().renderComponentTemplate(compContent, slotContext);
+            String rendered = context.getEngine().renderNamedComponent(componentPath, slotContext);
             writer.write(rendered);
         } else {
             throw new io.lemadane.piped.template.engine.exceptions.TemplateRenderException("Unable to resolve component template: " + componentPath);
