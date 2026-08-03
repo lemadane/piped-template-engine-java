@@ -1,7 +1,6 @@
 subprojects {
     apply plugin: 'java'
     apply plugin: 'java-library'
-    apply plugin: 'maven-publish'
 
     group = 'com.github.lemadane'
     version = '0.1.1'
@@ -25,6 +24,10 @@ subprojects {
             showStandardStreams = true
         }
     }
+}
+
+configure(subprojects.findAll { it.name.startsWith('piped-template-engine-') }) {
+    apply plugin: 'maven-publish'
 
     publishing {
         publications {
