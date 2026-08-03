@@ -805,25 +805,28 @@ public final class TemplateEngine {
                     val = val.substring(3).trim();
                 }
                 java.util.Map<String, String> attrs = parseKeyValuePairs(val);
-                String name = attrs.get("name");
-                if (name == null || name.isEmpty()) {
-                    name = attrs.get("title");
-                }
+                String name = getFirstPWAAttr(attrs, "name", "title", "appName", "app-name", "app_name");
+                String manifest = getFirstPWAAttr(attrs, "manifest", "manifestUrl", "manifest-url", "manifest_url");
+                String theme = getFirstPWAAttr(attrs, "theme", "themeColor", "theme-color", "theme_color");
+                String icon = getFirstPWAAttr(attrs, "icon", "iconUrl", "icon-url", "icon_url", "apple-touch-icon");
+                String sw = getFirstPWAAttr(attrs, "sw", "serviceWorker", "service-worker", "service_worker");
+                String statusColor = getFirstPWAAttr(attrs, "statusColor", "status-color", "status_color", "statusbar-color", "statusbarColor");
+
                 var pwaNode = new io.lemadane.piped.template.engine.ast.PWANode(
                     name,
-                    attrs.get("manifest"),
-                    attrs.get("theme"),
-                    attrs.get("icon"),
-                    attrs.get("sw"),
-                    attrs.get("statusColor")
+                    manifest,
+                    theme,
+                    icon,
+                    sw,
+                    statusColor
                 );
-                java.io.StringWriter sw = new java.io.StringWriter();
+                java.io.StringWriter swWriter = new java.io.StringWriter();
                 try {
-                    pwaNode.render(context, sw);
+                    pwaNode.render(context, swWriter);
                 } catch (IOException e) {
                     throw new TemplateRenderException("Failed to render pwa node", e);
                 }
-                output.append(sw.toString());
+                output.append(swWriter.toString());
                 index = closingPipeIndex + 1;
                 continue;
             }
@@ -3242,6 +3245,16 @@ public final class TemplateEngine {
             index = closingPipeIndex + 1;
         }
         throw new TemplateSyntaxException("Missing closing |/fragment|.");
+    }
+
+    private String getFirstPWAAttr(java.util.Map<String, String> attrs, String... keys) {
+        for (String key : keys) {
+            String val = attrs.get(key);
+            if (val != null && !val.isEmpty()) {
+                return val;
+            }
+        }
+        return null;
     }
 
     private java.util.Map<String, String> parseKeyValuePairs(String input) {

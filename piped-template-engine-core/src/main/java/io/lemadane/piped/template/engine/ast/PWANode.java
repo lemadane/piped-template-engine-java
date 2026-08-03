@@ -56,7 +56,8 @@ public final class PWANode implements ASTNode {
         }
 
         if (sw != null && !sw.isEmpty()) {
-            tags.add(String.format("<script>if('serviceWorker' in navigator){window.addEventListener('load',function(){navigator.serviceWorker.register('%s');});}</script>", escapeHtml(sw)));
+            String escapedSw = escapeHtml(sw);
+            tags.add(String.format("<script>if('serviceWorker' in navigator){if(document.readyState==='complete'){navigator.serviceWorker.register('%s');}else{window.addEventListener('load',function(){navigator.serviceWorker.register('%s');});}}</script>", escapedSw, escapedSw));
         }
 
         writer.write(String.join("\n", tags));

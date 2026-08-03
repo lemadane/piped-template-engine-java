@@ -35,6 +35,18 @@ class AbstractionsTest {
     }
 
     @Test
+    @DisplayName("Supports kebab-case and camelCase PWA attribute aliases")
+    void testPWAAttributeAliases() throws Exception {
+        String template = "|pwa app-name='PWA-App' theme-color='#ff0000' service-worker='/custom-sw.js' status-color='black-translucent'|";
+
+        String html = engine.renderString(template, Map.of());
+        assertTrue(html.contains("meta name=\"theme-color\" content=\"#ff0000\""));
+        assertTrue(html.contains("apple-mobile-web-app-title\" content=\"PWA-App\""));
+        assertTrue(html.contains("apple-mobile-web-app-status-bar-style\" content=\"black-translucent\""));
+        assertTrue(html.contains("navigator.serviceWorker.register('/custom-sw.js')"));
+    }
+
+    @Test
     @DisplayName("Renders HTMXHead and HTMXAttributes correctly")
     void testHTMXTags() throws Exception {
         String headTemplate = "|htmx src='/js/htmx.min.js' ext='json-enc' indicator=true|";
