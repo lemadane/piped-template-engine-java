@@ -151,6 +151,12 @@ public final class JavaCodeGenerator {
         if (node instanceof io.lemadane.piped.template.engine.ast.MinifyNode minNode) {
             return "new io.lemadane.piped.template.engine.ast.MinifyNode(" + generateASTNodeInstantiation(minNode.getBody()) + ")";
         }
+        if (node instanceof io.lemadane.piped.template.engine.ast.JsNode jsNode) {
+            return "new io.lemadane.piped.template.engine.ast.JsNode(" + escapeStringLiteral(jsNode.getExpression()) + ", " + generateASTNodeInstantiation(jsNode.getBody()) + ", new io.lemadane.piped.template.engine.expression.ExpressionEvaluator())";
+        }
+        if (node instanceof io.lemadane.piped.template.engine.ast.CssNode cssNode) {
+            return "new io.lemadane.piped.template.engine.ast.CssNode(" + escapeStringLiteral(cssNode.getExpression()) + ", " + generateASTNodeInstantiation(cssNode.getBody()) + ", new io.lemadane.piped.template.engine.expression.ExpressionEvaluator())";
+        }
         if (node instanceof io.lemadane.piped.template.engine.ast.FragmentNode fragNode) {
             return "new io.lemadane.piped.template.engine.ast.FragmentNode(" + escapeStringLiteral(fragNode.getName()) + ", " + generateASTNodeInstantiation(fragNode.getBody()) + ")";
         }

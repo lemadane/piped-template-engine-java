@@ -20,5 +20,11 @@
     <div class="container">
         |yield content|
     </div>
+    |css|
+    .app-title { font-weight: 700; }
+    |/css|
+    |js|
+    console.log("TaskMaster E2E Ready");
+    |/js|
 </body>
 </html>

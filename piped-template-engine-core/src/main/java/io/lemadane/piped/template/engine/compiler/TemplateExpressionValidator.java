@@ -15,7 +15,8 @@ final class TemplateExpressionValidator {
             "minify", "/minify", "page", "attempt", "/attempt", "recover",
             "pwa", "htmx", "htmx-get", "htmx-post", "htmx-put", "htmx-delete", "htmx-patch",
             "alpine", "alpine-data", "continue", "break", "separator", "/separator",
-            "model", "field", "display", "editor"
+            "model", "field", "display", "editor",
+            "js", "/js", "css", "/css"
     );
 
     static final Set<String> NO_ARG_DIRECTIVES = Set.of(
@@ -85,7 +86,7 @@ final class TemplateExpressionValidator {
             return false;
         }
 
-        if (Character.isDigit(word.charAt(0)) || Set.of("html", "attr", "json", "url").contains(word.toLowerCase())) {
+        if (Character.isDigit(word.charAt(0)) || Set.of("html", "attr", "json", "url", "js", "css").contains(word.toLowerCase())) {
             return false;
         }
 

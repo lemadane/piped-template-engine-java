@@ -111,6 +111,8 @@ public final class Parser {
                 case END_COMPONENT -> throw new TemplateSyntaxException(String.format("Unexpected |/component| at line %d, column %d without matching |component|.", token.line(), token.column()));
                 case END_SLOT -> throw new TemplateSyntaxException(String.format("Unexpected |/slot| at line %d, column %d without matching |slot|.", token.line(), token.column()));
                 case END_SEPARATOR -> throw new TemplateSyntaxException(String.format("Unexpected |/separator| at line %d, column %d without matching |separator|.", token.line(), token.column()));
+                case END_JS -> throw new TemplateSyntaxException(String.format("Unexpected |/js| at line %d, column %d without matching |js|.", token.line(), token.column()));
+                case END_CSS -> throw new TemplateSyntaxException(String.format("Unexpected |/css| at line %d, column %d without matching |css|.", token.line(), token.column()));
                 case BREAK -> {
                     if (ctx.getLoopDepth() == 0) {
                         throw new TemplateSyntaxException(String.format("|break| is only allowed inside a loop (line %d, column %d).", token.line(), token.column()));
@@ -157,6 +159,8 @@ public final class Parser {
                 case ALPINE -> nodes.add(parseAlpine(token));
                 case STATE -> nodes.add(parseState(token));
                 case ALPINE_ATTR -> nodes.add(parseAlpineAttr(token));
+                case JS -> nodes.add(parseJs(token, cursor, ctx));
+                case CSS -> nodes.add(parseCss(token, cursor, ctx));
                 default -> {
                     var outputExpr = outputExpressionParser.parse(token.value());
                     nodes.add(new ExpressionNode(outputExpr, evaluator));
@@ -537,6 +541,44 @@ public final class Parser {
             throw new TemplateSyntaxException(formatUnclosedError("minify", minifyToken, "/minify"));
         }
         return new MinifyNode(body);
+    }
+
+    JsNode parseJs(Token jsToken, Cursor cursor, ParseContext ctx) {
+        String val = jsToken.value().trim();
+        if (val.equals("js")) {
+            ASTNode body = parseBlock(cursor, ctx, TokenType.END_JS, "js");
+            if (cursor.hasNext() && cursor.peek().type() == TokenType.END_JS) {
+                cursor.next();
+            } else {
+                throw new TemplateSyntaxException(formatUnclosedError("js", jsToken, "/js"));
+            }
+            return new JsNode(body);
+        } else {
+            String expr = val.substring("js ".length()).trim();
+            if (expr.isBlank()) {
+                throw new TemplateSyntaxException(String.format("JavaScript expression must not be empty at line %d, column %d.", jsToken.line(), jsToken.column()));
+            }
+            return new JsNode(expr, evaluator);
+        }
+    }
+
+    CssNode parseCss(Token cssToken, Cursor cursor, ParseContext ctx) {
+        String val = cssToken.value().trim();
+        if (val.equals("css")) {
+            ASTNode body = parseBlock(cursor, ctx, TokenType.END_CSS, "css");
+            if (cursor.hasNext() && cursor.peek().type() == TokenType.END_CSS) {
+                cursor.next();
+            } else {
+                throw new TemplateSyntaxException(formatUnclosedError("css", cssToken, "/css"));
+            }
+            return new CssNode(body);
+        } else {
+            String expr = val.substring("css ".length()).trim();
+            if (expr.isBlank()) {
+                throw new TemplateSyntaxException(String.format("CSS expression must not be empty at line %d, column %d.", cssToken.line(), cssToken.column()));
+            }
+            return new CssNode(expr, evaluator);
+        }
     }
 
     IncludeNode parseInclude(Token token) {

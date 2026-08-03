@@ -50,5 +50,9 @@ public enum TokenType {
     END_FOR,
     CONTINUE,
     BREAK,
-    ALPINE_ATTR
+    ALPINE_ATTR,
+    JS,
+    END_JS,
+    CSS,
+    END_CSS
 }

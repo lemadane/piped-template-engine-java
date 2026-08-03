@@ -187,6 +187,14 @@ public final class Lexer {
             return TokenType.STATE;
         } else if (content.startsWith("alpine-")) {
             return TokenType.ALPINE_ATTR;
+        } else if ("js".equals(content) || content.startsWith("js ")) {
+            return TokenType.JS;
+        } else if ("/js".equals(content)) {
+            return TokenType.END_JS;
+        } else if ("css".equals(content) || content.startsWith("css ")) {
+            return TokenType.CSS;
+        } else if ("/css".equals(content)) {
+            return TokenType.END_CSS;
         }
         return TokenType.EXPRESSION;
     }
