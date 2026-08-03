@@ -6,7 +6,6 @@ import io.lemadane.piped.template.engine.spring.routing.PipedFileRouteHandlerMap
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.util.TestPropertyValues;
-import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.mock.web.MockServletContext;
@@ -36,6 +35,11 @@ class PwaCspIntegrationTest {
             String pwaView() {
                 return "pwa-view";
             }
+
+            @GetMapping("/pwa-nonce-view")
+            String pwaNonceView() {
+                return "pwa-nonce-view";
+            }
         }
     }
 
@@ -62,6 +66,65 @@ class PwaCspIntegrationTest {
             mockMvc.perform(get("/pte-assets/pwa-register.js"))
                     .andExpect(status().isOk())
                     .andExpect(content().string(containsString("serviceWorker")));
+        } finally {
+            ctx.close();
+        }
+    }
+
+    @Test
+    @DisplayName("Spring MVC Controller view renders inline PWA JavaScript via MockMvc according to Spring configuration")
+    void testControllerViewRendersInlinePwaJs() throws Exception {
+        AnnotationConfigWebApplicationContext ctx = createContext(
+                "spring.pipedtemplate.prefix=classpath:/pte-templates/",
+                "spring.pipedtemplate.pwa.registration-mode=inline",
+                "spring.pipedtemplate.pwa.require-nonce-for-inline=false"
+        );
+        try {
+            MockMvc mockMvc = MockMvcBuilders.webAppContextSetup(ctx).build();
+            mockMvc.perform(get("/pwa-view"))
+                    .andExpect(status().isOk())
+                    .andExpect(content().string(containsString("<script>if('serviceWorker' in navigator)")));
+        } finally {
+            ctx.close();
+        }
+    }
+
+    @Test
+    @DisplayName("Spring MVC Controller view renders custom external registration script via MockMvc")
+    void testControllerViewRendersCustomExternalScript() throws Exception {
+        AnnotationConfigWebApplicationContext ctx = createContext(
+                "spring.pipedtemplate.prefix=classpath:/pte-templates/",
+                "spring.pipedtemplate.pwa.registration-mode=external",
+                "spring.pipedtemplate.pwa.registration-script=/custom-assets/register.js"
+        );
+        try {
+            MockMvc mockMvc = MockMvcBuilders.webAppContextSetup(ctx).build();
+            mockMvc.perform(get("/pwa-view"))
+                    .andExpect(status().isOk())
+                    .andExpect(content().string(containsString("<script src=\"/custom-assets/register.js\" data-pte-service-worker=\"/sw.js\" defer></script>")));
+        } finally {
+            ctx.close();
+        }
+    }
+
+    @Test
+    @DisplayName("Spring MVC Controller view enforces required nonce for inline PWA mode via MockMvc")
+    void testControllerViewEnforcesNonceRequirement() throws Exception {
+        AnnotationConfigWebApplicationContext ctx = createContext(
+                "spring.pipedtemplate.prefix=classpath:/pte-templates/",
+                "spring.pipedtemplate.pwa.registration-mode=inline",
+                "spring.pipedtemplate.pwa.require-nonce-for-inline=true"
+        );
+        try {
+            MockMvc mockMvc = MockMvcBuilders.webAppContextSetup(ctx).build();
+
+            // Missing nonce fails
+            assertThrows(Exception.class, () -> mockMvc.perform(get("/pwa-view")));
+
+            // Valid nonce succeeds
+            mockMvc.perform(get("/pwa-nonce-view"))
+                    .andExpect(status().isOk())
+                    .andExpect(content().string(containsString("<script nonce=\"testNonce\">if('serviceWorker' in navigator)")));
         } finally {
             ctx.close();
         }
@@ -146,21 +209,71 @@ class PwaCspIntegrationTest {
 
     @Test
     @DisplayName("File-based route renders inline PWA JavaScript according to Spring configuration")
-    void testFileRouteUsesSpringPwaDefaults() throws Exception {
+    void testFileRouteRendersInlinePwaJs() throws Exception {
         AnnotationConfigWebApplicationContext ctx = createContext(
                 "spring.pipedtemplate.pwa.registration-mode=inline",
                 "spring.pipedtemplate.pwa.require-nonce-for-inline=false"
         );
         try {
-            TemplateEngine engine = ctx.getBean(TemplateEngine.class);
             PipedFileRouteHandlerMapping mapping = ctx.getBean(PipedFileRouteHandlerMapping.class);
-            mapping.registerFileRoute("/file-pwa", "pte-routes/file-pwa/+page.pte",
-                    new ByteArrayResource("|pwa sw='/sw.js'|\n<h1>PWA Page</h1>".getBytes()));
+            mapping.registerFileRoute("/file-pwa-inline", "pte-routes/file-pwa-inline/+page.pte",
+                    new ByteArrayResource("|pwa sw='/sw.js'|\n<h1>Inline PWA Page</h1>".getBytes()));
 
             MockMvc mockMvc = MockMvcBuilders.webAppContextSetup(ctx).build();
-            mockMvc.perform(get("/file-pwa"))
+            mockMvc.perform(get("/file-pwa-inline"))
                     .andExpect(status().isOk())
                     .andExpect(content().string(containsString("<script>if('serviceWorker' in navigator)")));
+        } finally {
+            ctx.close();
+        }
+    }
+
+    @Test
+    @DisplayName("File-based route renders custom external registration script according to Spring configuration")
+    void testFileRouteRendersCustomExternalScript() throws Exception {
+        AnnotationConfigWebApplicationContext ctx = createContext(
+                "spring.pipedtemplate.pwa.registration-mode=external",
+                "spring.pipedtemplate.pwa.registration-script=/my-custom/sw-reg.js"
+        );
+        try {
+            PipedFileRouteHandlerMapping mapping = ctx.getBean(PipedFileRouteHandlerMapping.class);
+            mapping.registerFileRoute("/file-pwa-ext", "pte-routes/file-pwa-ext/+page.pte",
+                    new ByteArrayResource("|pwa sw='/sw.js'|\n<h1>External PWA Page</h1>".getBytes()));
+
+            MockMvc mockMvc = MockMvcBuilders.webAppContextSetup(ctx).build();
+            mockMvc.perform(get("/file-pwa-ext"))
+                    .andExpect(status().isOk())
+                    .andExpect(content().string(containsString("<script src=\"/my-custom/sw-reg.js\" data-pte-service-worker=\"/sw.js\" defer></script>")));
+        } finally {
+            ctx.close();
+        }
+    }
+
+    @Test
+    @DisplayName("File-based route enforces required nonce for inline PWA mode")
+    void testFileRouteEnforcesNonceRequirement() throws Exception {
+        AnnotationConfigWebApplicationContext ctx = createContext(
+                "spring.pipedtemplate.pwa.registration-mode=inline",
+                "spring.pipedtemplate.pwa.require-nonce-for-inline=true"
+        );
+        try {
+            PipedFileRouteHandlerMapping mapping = ctx.getBean(PipedFileRouteHandlerMapping.class);
+            mapping.registerFileRoute("/file-pwa-no-nonce", "pte-routes/file-pwa-no-nonce/+page.pte",
+                    new ByteArrayResource("|pwa sw='/sw.js'|\n<h1>No Nonce Page</h1>".getBytes()));
+
+            mapping.registerFileRoute("/file-pwa-with-nonce", "pte-routes/file-pwa-with-nonce/+page.pte",
+                    new ByteArrayResource("|pwa sw='/sw.js' nonce='fileNonce123'|\n<h1>With Nonce Page</h1>".getBytes()));
+
+            MockMvc mockMvc = MockMvcBuilders.webAppContextSetup(ctx).build();
+
+            // Route without nonce fails (SafeTemplateErrorHandler returns HTTP 500)
+            mockMvc.perform(get("/file-pwa-no-nonce"))
+                    .andExpect(status().isInternalServerError());
+
+            // Route with nonce succeeds
+            mockMvc.perform(get("/file-pwa-with-nonce"))
+                    .andExpect(status().isOk())
+                    .andExpect(content().string(containsString("<script nonce=\"fileNonce123\">if('serviceWorker' in navigator)")));
         } finally {
             ctx.close();
         }
