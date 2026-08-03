@@ -2,13 +2,18 @@ package io.lemadane.piped.template.engine.spring;
 
 import io.lemadane.piped.template.engine.TemplateEngine;
 import io.lemadane.piped.template.engine.exceptions.TemplateSyntaxException;
+import io.lemadane.piped.template.engine.spring.routing.PipedFileRouteHandlerMapping;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.util.TestPropertyValues;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.io.ByteArrayResource;
 import org.springframework.mock.web.MockServletContext;
+import org.springframework.stereotype.Controller;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.context.support.AnnotationConfigWebApplicationContext;
 import org.springframework.web.servlet.config.annotation.EnableWebMvc;
 
@@ -25,6 +30,13 @@ class PwaCspIntegrationTest {
     @Configuration
     @EnableWebMvc
     static class TestAppConfig {
+        @Controller
+        static class SampleController {
+            @GetMapping("/pwa-view")
+            String pwaView() {
+                return "pwa-view";
+            }
+        }
     }
 
     AnnotationConfigWebApplicationContext createContext(String... envProperties) {
@@ -56,7 +68,7 @@ class PwaCspIntegrationTest {
     }
 
     @Test
-    @DisplayName("External mode generates script tag with configured script URL and preserves sw query params")
+    @DisplayName("External mode generates script tag with configured script URL across renderString and renderTemplateSource")
     void testExternalModeGeneratesConfiguredScriptUrl() {
         AnnotationConfigWebApplicationContext ctx = createContext(
                 "spring.pipedtemplate.pwa.registration-mode=external",
@@ -64,17 +76,20 @@ class PwaCspIntegrationTest {
         );
         try {
             TemplateEngine engine = ctx.getBean(TemplateEngine.class);
-            String html = engine.renderString("|pwa sw='/sw.js?v=1&scope=/app'|", Map.of());
+            String pwaDirective = "|pwa sw='/sw.js?v=1&scope=/app'|";
 
-            assertTrue(html.contains("<script src=\"/custom-assets/sw-loader.js\" data-pte-service-worker=\"/sw.js?v=1&scope=/app\" defer></script>"));
-            assertFalse(html.contains("&amp;scope="));
+            String htmlDirect = engine.renderString(pwaDirective, Map.of());
+            assertTrue(htmlDirect.contains("<script src=\"/custom-assets/sw-loader.js\" data-pte-service-worker=\"/sw.js?v=1&scope=/app\" defer></script>"));
+
+            String htmlSource = engine.renderTemplateSource(pwaDirective, Map.of()).html();
+            assertTrue(htmlSource.contains("<script src=\"/custom-assets/sw-loader.js\" data-pte-service-worker=\"/sw.js?v=1&scope=/app\" defer></script>"));
         } finally {
             ctx.close();
         }
     }
 
     @Test
-    @DisplayName("Inline mode generates inline JavaScript")
+    @DisplayName("Inline mode generates inline JavaScript across renderString and renderTemplateSource")
     void testInlineModeGeneratesInlineJs() {
         AnnotationConfigWebApplicationContext ctx = createContext(
                 "spring.pipedtemplate.pwa.registration-mode=inline",
@@ -82,16 +97,20 @@ class PwaCspIntegrationTest {
         );
         try {
             TemplateEngine engine = ctx.getBean(TemplateEngine.class);
-            String html = engine.renderString("|pwa sw='/sw.js'|", Map.of());
+            String pwaDirective = "|pwa sw='/sw.js'|";
 
-            assertTrue(html.contains("<script>if('serviceWorker' in navigator)"));
+            String htmlDirect = engine.renderString(pwaDirective, Map.of());
+            assertTrue(htmlDirect.contains("<script>if('serviceWorker' in navigator)"));
+
+            String htmlSource = engine.renderTemplateSource(pwaDirective, Map.of()).html();
+            assertTrue(htmlSource.contains("<script>if('serviceWorker' in navigator)"));
         } finally {
             ctx.close();
         }
     }
 
     @Test
-    @DisplayName("Required nonce for inline mode throws exception when nonce is missing")
+    @DisplayName("Required nonce for inline mode throws exception when nonce is missing across renderTemplateSource")
     void testRequiredNonceWithoutNonceIsRejected() {
         AnnotationConfigWebApplicationContext ctx = createContext(
                 "spring.pipedtemplate.pwa.registration-mode=inline",
@@ -99,7 +118,10 @@ class PwaCspIntegrationTest {
         );
         try {
             TemplateEngine engine = ctx.getBean(TemplateEngine.class);
-            assertThrows(TemplateSyntaxException.class, () -> engine.renderString("|pwa sw='/sw.js'|", Map.of()));
+            String pwaDirective = "|pwa sw='/sw.js'|";
+
+            assertThrows(TemplateSyntaxException.class, () -> engine.renderString(pwaDirective, Map.of()));
+            assertThrows(TemplateSyntaxException.class, () -> engine.renderTemplateSource(pwaDirective, Map.of()));
         } finally {
             ctx.close();
         }
@@ -117,6 +139,28 @@ class PwaCspIntegrationTest {
             String html = engine.renderString("|pwa sw='/sw.js' nonce='secret123'|", Map.of());
 
             assertTrue(html.contains("<script nonce=\"secret123\">if('serviceWorker' in navigator)"));
+        } finally {
+            ctx.close();
+        }
+    }
+
+    @Test
+    @DisplayName("File-based route renders inline PWA JavaScript according to Spring configuration")
+    void testFileRouteUsesSpringPwaDefaults() throws Exception {
+        AnnotationConfigWebApplicationContext ctx = createContext(
+                "spring.pipedtemplate.pwa.registration-mode=inline",
+                "spring.pipedtemplate.pwa.require-nonce-for-inline=false"
+        );
+        try {
+            TemplateEngine engine = ctx.getBean(TemplateEngine.class);
+            PipedFileRouteHandlerMapping mapping = ctx.getBean(PipedFileRouteHandlerMapping.class);
+            mapping.registerFileRoute("/file-pwa", "pte-routes/file-pwa/+page.pte",
+                    new ByteArrayResource("|pwa sw='/sw.js'|\n<h1>PWA Page</h1>".getBytes()));
+
+            MockMvc mockMvc = MockMvcBuilders.webAppContextSetup(ctx).build();
+            mockMvc.perform(get("/file-pwa"))
+                    .andExpect(status().isOk())
+                    .andExpect(content().string(containsString("<script>if('serviceWorker' in navigator)")));
         } finally {
             ctx.close();
         }

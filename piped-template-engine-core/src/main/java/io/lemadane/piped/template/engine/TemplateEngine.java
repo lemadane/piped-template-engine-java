@@ -360,7 +360,7 @@ public final class TemplateEngine {
     }
 
     public RenderResult renderTemplateSource(String templateSource, Map<String, Object> model) {
-        return renderTemplateSource(templateSource, model, RenderOptions.DEFAULT);
+        return renderTemplateSource(templateSource, model, defaultRenderOptions);
     }
 
     public RenderResult renderNamedTemplate(String templateName, Map<String, Object> model, RenderOptions options) {
@@ -369,7 +369,7 @@ public final class TemplateEngine {
     }
 
     public RenderResult renderNamedTemplate(String templateName, Map<String, Object> model) {
-        return renderNamedTemplate(templateName, model, RenderOptions.DEFAULT);
+        return renderNamedTemplate(templateName, model, defaultRenderOptions);
     }
 
     public String renderNamedTemplate(String templateName, TemplateContext context) {
@@ -479,10 +479,14 @@ public final class TemplateEngine {
     }
 
     public String renderStringWithContext(String template, TemplateContext context) {
-        return renderStringWithContext(template, context, RenderOptions.DEFAULT);
+        return renderStringWithContext(template, context, defaultRenderOptions);
     }
 
     public String renderStringWithContext(String template, TemplateContext context, RenderOptions options) {
+        RenderOptions effectiveOptions = options != null ? options : defaultRenderOptions;
+        if (context != null && context.getPwaRenderOptions() == null && effectiveOptions.pwaOptions() != null) {
+            context.setPwaRenderOptions(effectiveOptions.pwaOptions());
+        }
         return executeWithRenderScope(null, () -> {
             var executable = compileToBytecode(template);
             java.io.StringWriter writer = new java.io.StringWriter();
@@ -493,8 +497,8 @@ public final class TemplateEngine {
             }
             String output = writer.toString();
 
-            boolean useMinify = options.minify() || this.minify;
-            boolean usePrettify = options.prettify() || this.prettify;
+            boolean useMinify = effectiveOptions.minify() || this.minify;
+            boolean usePrettify = effectiveOptions.prettify() || this.prettify;
 
             if (useMinify) {
                 output = io.lemadane.piped.template.engine.utils.HtmlFormatter.minifyHtml(output);
