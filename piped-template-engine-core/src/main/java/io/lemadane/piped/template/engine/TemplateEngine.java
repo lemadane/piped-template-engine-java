@@ -2412,11 +2412,10 @@ public final class TemplateEngine {
 
     int findCommentEndIndex(String template, int openingPipeIndex) {
         final var commentStartIndex = openingPipeIndex + 2;
-        final var singleLineEndIndex = template.indexOf('|', commentStartIndex);
         final var blockEndIndex = template.indexOf("#|", commentStartIndex);
+        final var singleLineEndIndex = template.indexOf('|', commentStartIndex);
 
-        if (blockEndIndex != -1
-                && isBlockComment(template, commentStartIndex, singleLineEndIndex, blockEndIndex)) {
+        if (blockEndIndex != -1 && (singleLineEndIndex == -1 || blockEndIndex <= singleLineEndIndex)) {
             return blockEndIndex + 2;
         }
 
@@ -2426,21 +2425,6 @@ public final class TemplateEngine {
         }
 
         return singleLineEndIndex + 1;
-    }
-
-    boolean isBlockComment(
-            String template,
-            int commentStartIndex,
-            int singleLineEndIndex,
-            int blockEndIndex) {
-        if (singleLineEndIndex == blockEndIndex + 1) {
-            return true;
-        }
-
-        final var firstLineBreakIndex = findFirstLineBreakIndex(template, commentStartIndex);
-
-        return firstLineBreakIndex != -1
-                && (singleLineEndIndex == -1 || firstLineBreakIndex < singleLineEndIndex);
     }
 
     int findFirstLineBreakIndex(String template, int startIndex) {

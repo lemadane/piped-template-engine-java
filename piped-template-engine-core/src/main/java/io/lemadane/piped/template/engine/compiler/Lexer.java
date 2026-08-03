@@ -27,15 +27,22 @@ public final class Lexer {
                 tokens.add(createToken(template, TokenType.TEXT, template.substring(cursor, pipeIndex), cursor));
             }
 
-            // Check for comment |-- ... --|
-            if (template.startsWith("|--", pipeIndex)) {
-                int commentEnd = template.indexOf("--|", pipeIndex + 3);
-                if (commentEnd == -1) {
+            // Check for comment |# ... | or |# ... #|
+            if (template.startsWith("|#", pipeIndex)) {
+                int contentStart = pipeIndex + 2;
+                int hashPipeEnd = template.indexOf("#|", contentStart);
+                int pipeEnd = template.indexOf('|', contentStart);
+
+                if (hashPipeEnd != -1 && (pipeEnd == -1 || hashPipeEnd <= pipeEnd)) {
+                    tokens.add(createToken(template, TokenType.COMMENT, template.substring(contentStart, hashPipeEnd), pipeIndex));
+                    cursor = hashPipeEnd + 2;
+                } else if (pipeEnd != -1) {
+                    tokens.add(createToken(template, TokenType.COMMENT, template.substring(contentStart, pipeEnd), pipeIndex));
+                    cursor = pipeEnd + 1;
+                } else {
                     int[] lc = calculateLineAndColumn(template, pipeIndex);
                     throw new TemplateSyntaxException("Unclosed comment at line " + lc[0] + ", column " + lc[1] + ".");
                 }
-                tokens.add(createToken(template, TokenType.COMMENT, template.substring(pipeIndex + 3, commentEnd), pipeIndex));
-                cursor = commentEnd + 3;
                 continue;
             }
 
