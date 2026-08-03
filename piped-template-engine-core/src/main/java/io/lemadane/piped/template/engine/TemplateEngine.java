@@ -2406,25 +2406,14 @@ public final class TemplateEngine {
     }
 
     boolean isCommentStart(String template, int openingPipeIndex) {
-        return openingPipeIndex + 1 < template.length()
-                && template.charAt(openingPipeIndex + 1) == '#';
+        if (template != null && template.startsWith("|--", openingPipeIndex)) {
+            throw new TemplateSyntaxException("Removed comment syntax '|-- ... --|'. Use '|# comment|' or '|# ... #|'.");
+        }
+        return template != null && template.startsWith("|#", openingPipeIndex);
     }
 
     int findCommentEndIndex(String template, int openingPipeIndex) {
-        final var commentStartIndex = openingPipeIndex + 2;
-        final var blockEndIndex = template.indexOf("#|", commentStartIndex);
-        final var singleLineEndIndex = template.indexOf('|', commentStartIndex);
-
-        if (blockEndIndex != -1 && (singleLineEndIndex == -1 || blockEndIndex <= singleLineEndIndex)) {
-            return blockEndIndex + 2;
-        }
-
-        if (singleLineEndIndex == -1) {
-            throw new TemplateSyntaxException(
-                    "Missing closing pipe for comment starting at index " + openingPipeIndex + ".");
-        }
-
-        return singleLineEndIndex + 1;
+        return io.lemadane.piped.template.engine.compiler.CommentScanner.scan(template, openingPipeIndex).endIndex();
     }
 
     int findFirstLineBreakIndex(String template, int startIndex) {
