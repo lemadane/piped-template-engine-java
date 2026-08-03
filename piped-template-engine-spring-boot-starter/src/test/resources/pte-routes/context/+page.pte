@@ -1,4 +1,5 @@
 <div>
+    <p>URI:|page.requestUri|</p>
     <p>Query:|page.queryString|</p>
     <p>Method:|page.method|</p>
     <p>Param:|page.params.q|</p>

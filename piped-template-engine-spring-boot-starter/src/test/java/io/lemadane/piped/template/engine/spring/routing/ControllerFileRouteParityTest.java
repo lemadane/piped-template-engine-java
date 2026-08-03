@@ -59,6 +59,7 @@ class ControllerFileRouteParityTest {
             ));
             mapping.registerPageDataLoader("/comp-test", req -> Map.of("product", Map.of("name", "Widget")));
             mapping.registerPageDataLoader("/context-override", req -> Map.of("page", "Explicit Page Model"));
+            mapping.registerPageDataLoader("/title-override", req -> Map.of("title", "Custom Title"));
             return mapping;
         }
 
@@ -137,8 +138,12 @@ class ControllerFileRouteParityTest {
                 .andExpect(status().isOk())
                 .andExpect(content().string(containsString("<title>Dashboard</title>")));
 
-        // 3. Explicitly supplied model title overrides metadata title
+        // 3. Explicitly supplied model title overrides metadata title in both controller and file route
         mockMvc.perform(get("/title-override-controller"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("<title>Custom Title</title>")));
+
+        mockMvc.perform(get("/title-override"))
                 .andExpect(status().isOk())
                 .andExpect(content().string(containsString("<title>Custom Title</title>")));
     }
@@ -213,17 +218,27 @@ class ControllerFileRouteParityTest {
         String controllerHtml = controllerResult.getResponse().getContentAsString();
         String routeHtml = routeResult.getResponse().getContentAsString();
 
-        // Query, Method, Param, Header, Session, HTMX, Target, Trigger, CurrentURL render identically
-        assertEquals(controllerHtml, routeHtml, "Controller and file route page context output must match");
+        // requestUri naturally differs between routes, while query, method, param, header, session, HTMX render identically
+        assertTrue(controllerHtml.contains("<p>URI:/context-controller</p>"));
+        assertTrue(routeHtml.contains("<p>URI:/context</p>"));
         assertTrue(controllerHtml.contains("<p>Query:q=search-term</p>"));
+        assertTrue(routeHtml.contains("<p>Query:q=search-term</p>"));
         assertTrue(controllerHtml.contains("<p>Method:GET</p>"));
+        assertTrue(routeHtml.contains("<p>Method:GET</p>"));
         assertTrue(controllerHtml.contains("<p>Param:search-term</p>"));
+        assertTrue(routeHtml.contains("<p>Param:search-term</p>"));
         assertTrue(controllerHtml.contains("<p>Header:custom-header-val</p>"));
+        assertTrue(routeHtml.contains("<p>Header:custom-header-val</p>"));
         assertTrue(controllerHtml.contains("<p>Session:user_123</p>"));
+        assertTrue(routeHtml.contains("<p>Session:user_123</p>"));
         assertTrue(controllerHtml.contains("<p>HTMX:true</p>"));
+        assertTrue(routeHtml.contains("<p>HTMX:true</p>"));
         assertTrue(controllerHtml.contains("<p>Target:#target-element</p>"));
+        assertTrue(routeHtml.contains("<p>Target:#target-element</p>"));
         assertTrue(controllerHtml.contains("<p>Trigger:trigger-event</p>"));
+        assertTrue(routeHtml.contains("<p>Trigger:trigger-event</p>"));
         assertTrue(controllerHtml.contains("<p>CurrentURL:http://localhost/current</p>"));
+        assertTrue(routeHtml.contains("<p>CurrentURL:http://localhost/current</p>"));
 
         // Collision protection test: explicit model 'page' value is NOT overwritten by PipedPageContext
         mockMvc.perform(get("/context-override-controller"))
