@@ -66,7 +66,7 @@ public class PipedTemplateAutoConfiguration {
     public PipedFileRouteHandlerMapping pipedFileRouteHandlerMapping(
             TemplateEngine pipedTemplateEngine,
             ApplicationContext applicationContext) {
-        PipedFileRouteHandlerMapping mapping = new PipedFileRouteHandlerMapping(pipedTemplateEngine);
+        PipedFileRouteHandlerMapping mapping = new PipedFileRouteHandlerMapping(pipedTemplateEngine, properties.getRouting().isFailFast());
 
         String[] beanNames = applicationContext.getBeanNamesForAnnotation(PageLoader.class);
         for (String beanName : beanNames) {

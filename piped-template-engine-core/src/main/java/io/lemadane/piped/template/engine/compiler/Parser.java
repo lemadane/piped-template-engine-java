@@ -6,6 +6,7 @@ import io.lemadane.piped.template.engine.expression.ExpressionEvaluator;
 import io.lemadane.piped.template.engine.parsers.OutputExpressionParser;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 public final class Parser {
     final OutputExpressionParser outputExpressionParser = new OutputExpressionParser();
@@ -225,8 +226,15 @@ public final class Parser {
             }
 
             String itemName = statement.substring(0, inIndex).trim();
+            if (itemName.contains(",")) {
+                for (String part : itemName.split(",")) {
+                    TemplateIdentifierValidator.validateIdentifier("each", part.trim(), eachToken.line(), eachToken.column());
+                }
+            } else {
+                TemplateIdentifierValidator.validateIdentifier("each", itemName, eachToken.line(), eachToken.column());
+            }
             String collectionExpr = statement.substring(inIndex + 4).trim();
-            if (itemName.isBlank() || collectionExpr.isBlank()) {
+            if (collectionExpr.isBlank()) {
                 throw new TemplateSyntaxException(String.format("Invalid each statement syntax at line %d, column %d.", eachToken.line(), eachToken.column()));
             }
 
@@ -278,9 +286,7 @@ public final class Parser {
             }
 
             String itemName = statement.substring(0, fromIndex).trim();
-            if (itemName.isEmpty()) {
-                throw new TemplateSyntaxException(String.format("Missing loop variable in for directive at line %d, column %d.", forToken.line(), forToken.column()));
-            }
+            TemplateIdentifierValidator.validateIdentifier("for", itemName, forToken.line(), forToken.column());
 
             String fromRemainder = statement.substring(fromIndex + 6).trim();
             int toIndex = fromRemainder.indexOf(" to ");
@@ -448,7 +454,8 @@ public final class Parser {
     }
 
     MacroNode parseMacro(Token macroToken, Cursor cursor, ParseContext ctx) {
-        String val = macroToken.value().substring("macro ".length()).trim();
+        String raw = macroToken.value().trim();
+        String val = raw.startsWith("macro ") ? raw.substring("macro ".length()).trim() : "";
         int openParen = val.indexOf('(');
         int closeParen = val.indexOf(')');
 
@@ -473,9 +480,7 @@ public final class Parser {
             name = val;
         }
 
-        if (name.isBlank()) {
-            throw new TemplateSyntaxException(String.format("Macro name must not be empty at line %d, column %d.", macroToken.line(), macroToken.column()));
-        }
+        TemplateIdentifierValidator.validateIdentifier("macro", name, macroToken.line(), macroToken.column());
 
         ASTNode body = parseBlock(cursor, ctx, TokenType.END_MACRO, "macro");
         if (cursor.hasNext() && cursor.peek().type() == TokenType.END_MACRO) {
@@ -488,7 +493,8 @@ public final class Parser {
     }
 
     CallMacroNode parseCallMacro(Token callToken) {
-        String val = callToken.value().substring("call ".length()).trim();
+        String raw = callToken.value().trim();
+        String val = raw.startsWith("call ") ? raw.substring("call ".length()).trim() : "";
         int openParen = val.indexOf('(');
         int closeParen = val.lastIndexOf(')');
 
@@ -506,18 +512,15 @@ public final class Parser {
             name = val;
         }
 
-        if (name.isBlank()) {
-            throw new TemplateSyntaxException(String.format("Call macro name must not be empty at line %d, column %d.", callToken.line(), callToken.column()));
-        }
+        TemplateIdentifierValidator.validateIdentifier("call", name, callToken.line(), callToken.column());
 
         return new CallMacroNode(name, args, evaluator);
     }
 
     FragmentNode parseFragment(Token fragmentToken, Cursor cursor, ParseContext ctx) {
-        String name = fragmentToken.value().substring("fragment ".length()).trim();
-        if (name.isBlank()) {
-            throw new TemplateSyntaxException(String.format("Fragment name must not be empty at line %d, column %d.", fragmentToken.line(), fragmentToken.column()));
-        }
+        String raw = fragmentToken.value().trim();
+        String name = raw.startsWith("fragment ") ? raw.substring("fragment ".length()).trim() : "";
+        TemplateIdentifierValidator.validateIdentifier("fragment", name, fragmentToken.line(), fragmentToken.column());
 
         ASTNode body = parseBlock(cursor, ctx, TokenType.END_FRAGMENT, "fragment");
         if (cursor.hasNext() && cursor.peek().type() == TokenType.END_FRAGMENT) {
@@ -539,7 +542,8 @@ public final class Parser {
     }
 
     IncludeNode parseInclude(Token token) {
-        String statement = token.value().substring("include ".length()).trim();
+        String raw = token.value().trim();
+        String statement = raw.startsWith("include ") ? raw.substring("include ".length()).trim() : "";
         if (statement.isBlank()) {
             throw new TemplateSyntaxException(String.format("Include path must not be empty at line %d, column %d.", token.line(), token.column()));
         }
@@ -558,17 +562,14 @@ public final class Parser {
         } else {
             templatePath = statement;
         }
-        if (templatePath.startsWith("/") || templatePath.contains("..")) {
-            throw new TemplateSyntaxException(String.format("Include path '%s' is not allowed at line %d, column %d.", templatePath, token.line(), token.column()));
-        }
+        TemplateIdentifierValidator.validateTemplatePath("include", templatePath, token.line(), token.column());
         return new IncludeNode(templatePath, modelExpr, evaluator);
     }
 
     LayoutNode parseLayout(Token token, Cursor cursor, ParseContext ctx) {
-        String layoutPath = token.value().substring("layout ".length()).trim();
-        if (layoutPath.isBlank()) {
-            throw new TemplateSyntaxException(String.format("Layout path must not be empty at line %d, column %d.", token.line(), token.column()));
-        }
+        String raw = token.value().trim();
+        String layoutPath = raw.startsWith("layout ") ? raw.substring("layout ".length()).trim() : "";
+        TemplateIdentifierValidator.validateTemplatePath("layout", layoutPath, token.line(), token.column());
         ASTNode body = parseBlock(cursor, ctx, null, null);
         if (body instanceof BlockNode blockNode) {
             for (ASTNode child : blockNode.getChildren()) {
@@ -588,10 +589,9 @@ public final class Parser {
         if (ctx.isInSection()) {
             throw new TemplateSyntaxException(String.format("Nested |section| is not allowed at line %d, column %d.", token.line(), token.column()));
         }
-        String sectionName = token.value().substring("section ".length()).trim();
-        if (sectionName.isBlank()) {
-            throw new TemplateSyntaxException(String.format("Section name must not be empty at line %d, column %d.", token.line(), token.column()));
-        }
+        String raw = token.value().trim();
+        String sectionName = raw.startsWith("section ") ? raw.substring("section ".length()).trim() : "";
+        TemplateIdentifierValidator.validateIdentifier("section", sectionName, token.line(), token.column());
         if (!ctx.getDefinedSections().add(sectionName)) {
             throw new TemplateSyntaxException(String.format("Duplicate section '%s' at line %d, column %d.", sectionName, token.line(), token.column()));
         }
@@ -610,15 +610,15 @@ public final class Parser {
     }
 
     YieldNode parseYield(Token token) {
-        String sectionName = token.value().substring("yield ".length()).trim();
-        if (sectionName.isBlank()) {
-            throw new TemplateSyntaxException(String.format("Yield section name must not be empty at line %d, column %d.", token.line(), token.column()));
-        }
+        String raw = token.value().trim();
+        String sectionName = raw.startsWith("yield ") ? raw.substring("yield ".length()).trim() : "";
+        TemplateIdentifierValidator.validateIdentifier("yield", sectionName, token.line(), token.column());
         return new YieldNode(sectionName);
     }
 
     ComponentNode parseComponent(Token token, Cursor cursor, ParseContext ctx) {
-        String statement = token.value().substring("component ".length()).trim();
+        String raw = token.value().trim();
+        String statement = raw.startsWith("component ") ? raw.substring("component ".length()).trim() : "";
         if (statement.isBlank()) {
             throw new TemplateSyntaxException(String.format("Component directive must specify path at line %d, column %d.", token.line(), token.column()));
         }
@@ -631,6 +631,8 @@ public final class Parser {
         } else {
             componentPath = statement;
         }
+
+        TemplateIdentifierValidator.validateTemplatePath("component", componentPath, token.line(), token.column());
 
         ctx.incrementComponentDepth();
         try {
@@ -669,10 +671,9 @@ public final class Parser {
         if (ctx.isInSlot()) {
             throw new TemplateSyntaxException("Nested slot declarations are forbidden at line " + token.line() + ", column " + token.column() + ".");
         }
-        String slotName = token.value().substring("slot ".length()).trim();
-        if (slotName.isBlank()) {
-            throw new TemplateSyntaxException("Slot name must not be empty at line " + token.line() + ", column " + token.column() + ".");
-        }
+        String raw = token.value().trim();
+        String slotName = raw.startsWith("slot ") ? raw.substring("slot ".length()).trim() : "";
+        TemplateIdentifierValidator.validateIdentifier("slot", slotName, token.line(), token.column());
         if (ctx.getComponentDepth() == 0 && !ctx.isInComponentTemplate()) {
             throw new TemplateSyntaxException("Slot declaration outside component context at line " + token.line() + ", column " + token.column() + ".");
         }
@@ -707,6 +708,7 @@ public final class Parser {
                 String val = recoverToken.value().substring("recover".length()).trim();
                 if (val.startsWith("as ")) {
                     errorVarName = val.substring("as ".length()).trim();
+                    TemplateIdentifierValidator.validateIdentifier("recover", errorVarName, recoverToken.line(), recoverToken.column());
                 } else if (!val.isEmpty()) {
                     throw new TemplateSyntaxException(String.format("Invalid recover directive syntax at line %d, column %d: %s", recoverToken.line(), recoverToken.column(), recoverToken.value()));
                 }
@@ -730,13 +732,18 @@ public final class Parser {
     }
 
     void parsePageMetadata(Token token, ParseContext ctx) {
-        String val = token.value().substring("page ".length()).trim();
-        int eqIndex = val.indexOf('=');
-        if (eqIndex != -1) {
-            String key = val.substring(0, eqIndex).trim();
-            String valueStr = val.substring(eqIndex + 1).trim();
-            Object value = parseMetadataValue(valueStr);
-            ctx.getMetadata().put(key, value);
+        String val = token.value();
+        if (val.length() <= 4) {
+            return;
+        }
+        val = val.substring(4).trim();
+        if (val.isBlank()) {
+            return;
+        }
+        Map<String, Object> attrs = DirectiveAttributeParser.parseAttributes("page", val);
+        for (Map.Entry<String, Object> entry : attrs.entrySet()) {
+            TemplateIdentifierValidator.validateIdentifier("page", entry.getKey(), token.line(), token.column());
+            ctx.getMetadata().put(entry.getKey(), entry.getValue());
         }
     }
 
@@ -777,22 +784,24 @@ public final class Parser {
         if (val.startsWith("pwa")) {
             val = val.substring(3).trim();
         }
-        java.util.Map<String, String> attrs = parseKeyValuePairs(val);
+        Map<String, Object> attrs = DirectiveAttributeParser.parseAttributes("pwa", val);
         String name = getFirstPWAAttr(attrs, "name", "title", "appName", "app-name", "app_name");
         String manifest = getFirstPWAAttr(attrs, "manifest", "manifestUrl", "manifest-url", "manifest_url");
         String theme = getFirstPWAAttr(attrs, "theme", "themeColor", "theme-color", "theme_color");
         String icon = getFirstPWAAttr(attrs, "icon", "iconUrl", "icon-url", "icon_url", "apple-touch-icon");
         String sw = getFirstPWAAttr(attrs, "sw", "serviceWorker", "service-worker", "service_worker");
         String statusColor = getFirstPWAAttr(attrs, "statusColor", "status-color", "status_color", "statusbar-color", "statusbarColor");
+        String registrationScript = getFirstPWAAttr(attrs, "registrationScript", "registration-script", "registration_script");
+        String nonce = getFirstPWAAttr(attrs, "nonce");
 
-        return new PWANode(name, manifest, theme, icon, sw, statusColor);
+        return new PWANode(name, manifest, theme, icon, sw, statusColor, registrationScript, nonce);
     }
 
-    String getFirstPWAAttr(java.util.Map<String, String> attrs, String... keys) {
+    String getFirstPWAAttr(Map<String, Object> attrs, String... keys) {
         for (String key : keys) {
-            String val = attrs.get(key);
-            if (val != null && !val.isEmpty()) {
-                return val;
+            Object val = attrs.get(key);
+            if (val != null) {
+                return String.valueOf(val);
             }
         }
         return null;
@@ -803,11 +812,11 @@ public final class Parser {
         if (val.startsWith("htmx")) {
             val = val.substring(4).trim();
         }
-        java.util.Map<String, String> attrs = parseKeyValuePairs(val);
+        Map<String, Object> attrs = DirectiveAttributeParser.parseAttributes("htmx", val);
         List<String> extensions = new ArrayList<>();
-        String extStr = attrs.get("ext") != null ? attrs.get("ext") : attrs.get("extensions");
-        if (extStr != null && !extStr.isEmpty()) {
-            for (String e : extStr.split(",")) {
+        Object extObj = attrs.get("ext") != null ? attrs.get("ext") : attrs.get("extensions");
+        if (extObj != null) {
+            for (String e : String.valueOf(extObj).split(",")) {
                 String trimmed = e.trim();
                 if (!trimmed.isEmpty()) {
                     extensions.add(trimmed);
@@ -815,16 +824,13 @@ public final class Parser {
             }
         }
         boolean indicator = false;
-        String indVal = attrs.get("indicator");
+        Object indVal = attrs.get("indicator");
         if (indVal != null) {
-            indicator = "true".equals(indVal) || "1".equals(indVal) || indVal.isEmpty();
+            indicator = Boolean.TRUE.equals(indVal) || "true".equalsIgnoreCase(String.valueOf(indVal)) || "1".equals(String.valueOf(indVal));
         }
-        return new HTMXNode(
-            attrs.get("src"),
-            extensions,
-            attrs.get("config"),
-            indicator
-        );
+        String src = attrs.get("src") != null ? String.valueOf(attrs.get("src")) : null;
+        String config = attrs.get("config") != null ? String.valueOf(attrs.get("config")) : null;
+        return new HTMXNode(src, extensions, config, indicator);
     }
 
     HXAttrNode parseHXAttr(Token token) {
@@ -855,15 +861,13 @@ public final class Parser {
         }
 
         urlPath = unquote(urlPath);
-        java.util.Map<String, String> attrs = parseKeyValuePairs(attrsStr);
-        return new HXAttrNode(
-            method,
-            urlPath,
-            attrs.get("target"),
-            attrs.get("swap"),
-            attrs.get("indicator"),
-            attrs.get("trigger")
-        );
+        Map<String, Object> attrs = DirectiveAttributeParser.parseAttributes("htmx-" + method, attrsStr);
+        String target = attrs.get("target") != null ? String.valueOf(attrs.get("target")) : null;
+        String swap = attrs.get("swap") != null ? String.valueOf(attrs.get("swap")) : null;
+        String indicator = attrs.get("indicator") != null ? String.valueOf(attrs.get("indicator")) : null;
+        String trigger = attrs.get("trigger") != null ? String.valueOf(attrs.get("trigger")) : null;
+
+        return new HXAttrNode(method, urlPath, target, swap, indicator, trigger);
     }
 
     String unquote(String s) {
@@ -883,11 +887,11 @@ public final class Parser {
             val = val.substring(6).trim();
         }
 
-        java.util.Map<String, String> attrs = parseKeyValuePairs(val);
+        Map<String, Object> attrs = DirectiveAttributeParser.parseAttributes("alpine", val);
         List<String> plugins = new ArrayList<>();
-        String pluginStr = attrs.get("plugins");
-        if (pluginStr != null && !pluginStr.isEmpty()) {
-            for (String pl : pluginStr.split(",")) {
+        Object pluginObj = attrs.get("plugins");
+        if (pluginObj != null) {
+            for (String pl : String.valueOf(pluginObj).split(",")) {
                 String trimmed = pl.trim();
                 if (!trimmed.isEmpty()) {
                     plugins.add(trimmed);
@@ -896,16 +900,13 @@ public final class Parser {
         }
 
         boolean cloak = true;
-        String cVal = attrs.get("cloak");
+        Object cVal = attrs.get("cloak");
         if (cVal != null) {
-            cloak = "true".equals(cVal) || "1".equals(cVal) || cVal.isEmpty();
+            cloak = Boolean.TRUE.equals(cVal) || "true".equalsIgnoreCase(String.valueOf(cVal)) || "1".equals(String.valueOf(cVal));
         }
 
-        return new AlpineNode(
-            attrs.get("src"),
-            plugins,
-            cloak
-        );
+        String src = attrs.get("src") != null ? String.valueOf(attrs.get("src")) : null;
+        return new AlpineNode(src, plugins, cloak);
     }
 
     StateNode parseState(Token token) {

@@ -47,10 +47,20 @@ public final class Lexer {
             }
 
             String content = template.substring(pipeIndex + 1, closingPipe).trim();
+            int[] lc = calculateLineAndColumn(template, pipeIndex);
+            TemplateExpressionValidator.validatePipeContent(content, lc[0], lc[1]);
             TokenType type = classifyToken(content);
 
             tokens.add(createToken(template, type, content, pipeIndex));
             cursor = closingPipe + 1;
+            if (type == TokenType.PAGE || type == TokenType.MODEL) {
+                if (cursor < template.length() && template.charAt(cursor) == '\r') {
+                    cursor++;
+                }
+                if (cursor < template.length() && template.charAt(cursor) == '\n') {
+                    cursor++;
+                }
+            }
         }
 
         return tokens;
@@ -106,21 +116,21 @@ public final class Lexer {
             return TokenType.FALLTHROUGH;
         } else if ("/switch".equals(content)) {
             return TokenType.END_SWITCH;
-        } else if (content.startsWith("include ")) {
+        } else if (content.equals("include") || content.startsWith("include ")) {
             return TokenType.INCLUDE;
-        } else if (content.startsWith("layout ")) {
+        } else if (content.equals("layout") || content.startsWith("layout ")) {
             return TokenType.LAYOUT;
-        } else if (content.startsWith("section ")) {
+        } else if (content.equals("section") || content.startsWith("section ")) {
             return TokenType.SECTION;
         } else if ("/section".equals(content)) {
             return TokenType.END_SECTION;
-        } else if (content.startsWith("yield ")) {
+        } else if (content.equals("yield") || content.startsWith("yield ")) {
             return TokenType.YIELD;
-        } else if (content.startsWith("component ")) {
+        } else if (content.equals("component") || content.startsWith("component ")) {
             return TokenType.COMPONENT;
         } else if ("/component".equals(content)) {
             return TokenType.END_COMPONENT;
-        } else if (content.startsWith("slot ")) {
+        } else if (content.equals("slot") || content.startsWith("slot ")) {
             return TokenType.SLOT;
         } else if ("/slot".equals(content)) {
             return TokenType.END_SLOT;
@@ -132,17 +142,17 @@ public final class Lexer {
             return TokenType.DISPLAY;
         } else if (content.startsWith("editor ")) {
             return TokenType.EDITOR;
-        } else if (content.startsWith("macro ")) {
+        } else if (content.equals("macro") || content.startsWith("macro ")) {
             return TokenType.MACRO;
         } else if ("/macro".equals(content)) {
             return TokenType.END_MACRO;
-        } else if (content.startsWith("call ")) {
+        } else if (content.equals("call") || content.startsWith("call ")) {
             return TokenType.CALL;
         } else if ("separator".equals(content)) {
             return TokenType.SEPARATOR;
         } else if ("/separator".equals(content)) {
             return TokenType.END_SEPARATOR;
-        } else if (content.startsWith("fragment ")) {
+        } else if (content.equals("fragment") || content.startsWith("fragment ")) {
             return TokenType.FRAGMENT;
         } else if ("/fragment".equals(content)) {
             return TokenType.END_FRAGMENT;
@@ -154,7 +164,7 @@ public final class Lexer {
             return TokenType.PAGE;
         } else if ("attempt".equals(content)) {
             return TokenType.ATTEMPT;
-        } else if (content.startsWith("recover")) {
+        } else if (content.equals("recover") || content.startsWith("recover")) {
             return TokenType.RECOVER;
         } else if ("/attempt".equals(content)) {
             return TokenType.END_ATTEMPT;

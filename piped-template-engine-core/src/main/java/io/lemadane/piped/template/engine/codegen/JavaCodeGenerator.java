@@ -155,7 +155,7 @@ public final class JavaCodeGenerator {
             return "new io.lemadane.piped.template.engine.ast.FragmentNode(" + escapeStringLiteral(fragNode.getName()) + ", " + generateASTNodeInstantiation(fragNode.getBody()) + ")";
         }
         if (node instanceof io.lemadane.piped.template.engine.ast.PWANode pwaNode) {
-            return "new io.lemadane.piped.template.engine.ast.PWANode(" + escapeStringLiteral(pwaNode.getName()) + ", " + escapeStringLiteral(pwaNode.getManifest()) + ", " + escapeStringLiteral(pwaNode.getTheme()) + ", " + escapeStringLiteral(pwaNode.getIcon()) + ", " + escapeStringLiteral(pwaNode.getSW()) + ", " + escapeStringLiteral(pwaNode.getStatusColor()) + ")";
+            return "new io.lemadane.piped.template.engine.ast.PWANode(" + escapeStringLiteral(pwaNode.getName()) + ", " + escapeStringLiteral(pwaNode.getManifest()) + ", " + escapeStringLiteral(pwaNode.getTheme()) + ", " + escapeStringLiteral(pwaNode.getIcon()) + ", " + escapeStringLiteral(pwaNode.getSW()) + ", " + escapeStringLiteral(pwaNode.getStatusColor()) + ", " + escapeStringLiteral(pwaNode.getRegistrationScript()) + ", " + escapeStringLiteral(pwaNode.getNonce()) + ")";
         }
         if (node instanceof io.lemadane.piped.template.engine.ast.HTMXNode htmxNode) {
             StringBuilder sb = new StringBuilder("new io.lemadane.piped.template.engine.ast.HTMXNode(");

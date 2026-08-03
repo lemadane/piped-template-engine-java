@@ -627,3 +627,37 @@ Write any Alpine.js directive attribute shorthand using `|alpine-<directive> ...
 <!-- x-init shorthand -->
 <div |alpine-init "console.log('Initialized')"|></div>
 ```
+
+---
+
+### 33. Compiler Syntax Strictness, Route Security & CSP Compatibility
+
+#### A. Directive Identifier Rules & Strict Validation
+Directives with empty or malformed identifier names (`|macro ()|`, `|fragment |`, `|section |`, `|slot |`, `|include |`, `|layout |`, `|component |`) or invalid path syntax (`|include /abs/path|`, `|include ../traversal|`) throw `TemplateSyntaxException` at compile time.
+
+Identifiers must match regex `[A-Za-z_][A-Za-z0-9_-]*`.
+
+#### B. Unknown Directives & Fuzzy Spelling Suggestions
+Unknown directives or typos (`|inculde|`, `|ifx|`, `|wat nonsense|`) trigger compile-time errors with fuzzy spelling suggestions:
+```text
+TemplateSyntaxException: Unknown directive '|inculde partials/header|' at line 6, column 9. Did you mean '|include|'?
+```
+
+#### C. Directive Attribute Parsing
+Directives (`|pwa ...|`, `|htmx ...|`, `|alpine ...|`) use a unified attribute tokenizer. Attributes support single/double quotes, unquoted booleans/numbers, escaped quotes, spaces inside quotes, and optional `=` whitespace:
+```pte
+|pwa name='Task Master' theme="#123456" sw='/sw.js'|
+```
+Duplicate attribute declarations (`name='A' name='B'`) or unclosed quotes are rejected at compile time.
+
+#### D. Route & Query Model Namespaces and Precedence
+In file-based routes, URL path variables and query parameters are exposed both in root model and under explicit `route` and `query` namespaces (`|route.id|`, `|query.id|`). Path variables take precedence over query parameters on key collisions.
+
+#### E. Safe Production HTTP Error Handling
+Errors during file-route rendering return a generic `"Internal Server Error"` response in production, logging full stack traces with an `X-Correlation-ID` response header. HTTP 401 Unauthorized and 403 Forbidden statuses are preserved.
+
+#### F. Fail-Fast Startup Route Discovery
+Malformed template route files, duplicate route patterns, or unclosed dynamic path brackets (`[id`) trigger `RouteDiscoveryException` at application startup when `spring.pipedtemplate.routing.fail-fast=true` (default).
+
+#### G. Strict Content Security Policy (CSP) PWA Compatibility
+PWA registration supports external script mode (`|pwa sw='/sw.js' registration-script='/pte-assets/pwa-register.js'|`) and nonce attributes (`|pwa sw='/sw.js' nonce='rAnd0mN0nc3'|`) to comply with strict CSP policies (`default-src 'self'; script-src 'self'`).

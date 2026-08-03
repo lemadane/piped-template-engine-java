@@ -17,7 +17,11 @@ public class PipedResponseMetadataApplicator {
             response.setContentType(String.valueOf(metadata.get("contentType")));
         }
 
-        if (metadata.containsKey("cache")) {
+        if (metadata.containsKey("cacheControl")) {
+            response.setHeader("Cache-Control", String.valueOf(metadata.get("cacheControl")));
+        } else if (metadata.containsKey("cache-control")) {
+            response.setHeader("Cache-Control", String.valueOf(metadata.get("cache-control")));
+        } else if (metadata.containsKey("cache")) {
             response.setHeader("Cache-Control", String.valueOf(metadata.get("cache")));
         }
 

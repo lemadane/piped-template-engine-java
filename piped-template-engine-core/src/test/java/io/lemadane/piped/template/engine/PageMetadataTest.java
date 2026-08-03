@@ -28,7 +28,7 @@ class PageMetadataTest {
         assertEquals("Pricing Options", meta.get("title"));
         assertEquals("public, max-age=3600", meta.get("cache"));
         assertEquals(Boolean.TRUE, meta.get("auth"));
-        assertEquals(123, meta.get("custom"));
+        assertEquals(123L, meta.get("custom"));
 
         assertTrue(meta.get("roles") instanceof List);
         List<?> roles = (List<?>) meta.get("roles");
