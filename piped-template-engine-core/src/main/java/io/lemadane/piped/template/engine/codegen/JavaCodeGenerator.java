@@ -242,6 +242,35 @@ public final class JavaCodeGenerator {
                 sb.append(indent).append("    }\n");
             }
             sb.append(indent).append("}\n");
+        } else if (node instanceof io.lemadane.piped.template.engine.ast.SwitchNode switchNode) {
+            sb.append(indent).append("{\n");
+            sb.append(indent).append("    io.lemadane.piped.template.engine.expression.ExpressionEvaluator eval = new io.lemadane.piped.template.engine.expression.ExpressionEvaluator();\n");
+            sb.append(indent).append("    Object switchVal = eval.evaluate(").append(escapeStringLiteral(switchNode.getSwitchExpression())).append(", context);\n");
+            sb.append(indent).append("    boolean matched = false;\n");
+            sb.append(indent).append("    boolean fallthrough = false;\n");
+            for (var sc : switchNode.getCases()) {
+                sb.append(indent).append("    if (!matched) {\n");
+                sb.append(indent).append("        Object caseVal = eval.evaluate(").append(escapeStringLiteral(sc.caseExpression())).append(", context);\n");
+                sb.append(indent).append("        if (fallthrough || eval.valuesEqual(switchVal, caseVal)) {\n");
+                sb.append(indent).append("            matched = true;\n");
+                generateNodeSource(sc.body(), sb, indent + "            ");
+                if (sc.hasFallthrough()) {
+                    sb.append(indent).append("            fallthrough = true;\n");
+                }
+                sb.append(indent).append("        }\n");
+                sb.append(indent).append("    } else if (fallthrough) {\n");
+                generateNodeSource(sc.body(), sb, indent + "        ");
+                if (!sc.hasFallthrough()) {
+                    sb.append(indent).append("        fallthrough = false;\n");
+                }
+                sb.append(indent).append("    }\n");
+            }
+            if (switchNode.getDefaultBlock() != null) {
+                sb.append(indent).append("    if (!matched || fallthrough) {\n");
+                generateNodeSource(switchNode.getDefaultBlock(), sb, indent + "        ");
+                sb.append(indent).append("    }\n");
+            }
+            sb.append(indent).append("}\n");
         }
     }
 

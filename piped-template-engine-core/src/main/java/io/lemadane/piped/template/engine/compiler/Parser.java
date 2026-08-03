@@ -45,6 +45,10 @@ public final class Parser {
                 break;
             }
 
+            if (switchSectionDepth > 0 && (token.type() == TokenType.CASE || token.type() == TokenType.DEFAULT || token.type() == TokenType.END_SWITCH)) {
+                break;
+            }
+
             if (token.type() == TokenType.ELSE || token.type() == TokenType.ELSE_IF) {
                 break;
             }
@@ -61,6 +65,11 @@ public final class Parser {
                 case IF -> nodes.add(parseIf(token, cursor));
                 case EACH -> nodes.add(parseEach(token, cursor));
                 case FOR -> nodes.add(parseFor(token, cursor));
+                case SWITCH -> nodes.add(parseSwitch(token, cursor));
+                case CASE -> throw new TemplateSyntaxException("Unexpected |case| without matching |switch|.");
+                case DEFAULT -> throw new TemplateSyntaxException("Unexpected |default| without matching |switch|.");
+                case FALLTHROUGH -> nodes.add(new io.lemadane.piped.template.engine.ast.FallthroughNode());
+                case END_SWITCH -> throw new TemplateSyntaxException("Unexpected |/switch| without matching |switch|.");
                 case BREAK -> {
                     if (loopDepth == 0) {
                         throw new TemplateSyntaxException("|break| is only allowed inside a loop.");
@@ -262,6 +271,78 @@ public final class Parser {
             eachDepth--;
             loopDepth--;
         }
+    }
+
+    private int switchSectionDepth = 0;
+
+    private ASTNode parseSwitchSectionBlock(Cursor cursor) {
+        switchSectionDepth++;
+        try {
+            return parseBlock(cursor, null);
+        } finally {
+            switchSectionDepth--;
+        }
+    }
+
+    private io.lemadane.piped.template.engine.ast.SwitchNode parseSwitch(Token switchToken, Cursor cursor) {
+        String switchExpr = switchToken.value().substring("switch ".length()).trim();
+        if (switchExpr.isBlank()) {
+            throw new TemplateSyntaxException("|switch| expression must not be empty.");
+        }
+
+        List<io.lemadane.piped.template.engine.ast.SwitchNode.SwitchCase> cases = new ArrayList<>();
+        ASTNode defaultBlock = null;
+
+        while (cursor.hasNext() && cursor.peek().type() != TokenType.END_SWITCH) {
+            Token token = cursor.peek();
+            if (token.type() == TokenType.CASE) {
+                cursor.next();
+                String caseExpr = token.value().substring("case ".length()).trim();
+                if (caseExpr.isBlank()) {
+                    throw new TemplateSyntaxException("|case| expression must not be empty.");
+                }
+                if (defaultBlock != null) {
+                    throw new TemplateSyntaxException("|case| is not allowed after |default|.");
+                }
+
+                ASTNode caseBody = parseSwitchSectionBlock(cursor);
+                boolean hasFallthrough = extractAndCheckFallthrough(caseBody);
+                cases.add(new io.lemadane.piped.template.engine.ast.SwitchNode.SwitchCase(caseExpr, caseBody, hasFallthrough));
+            } else if (token.type() == TokenType.DEFAULT) {
+                cursor.next();
+                if (defaultBlock != null) {
+                    throw new TemplateSyntaxException("Only one |default| is allowed inside |switch|.");
+                }
+                ASTNode defBody = parseSwitchSectionBlock(cursor);
+                extractAndCheckFallthrough(defBody);
+                defaultBlock = defBody;
+            } else if (token.type() == TokenType.TEXT && token.value().isBlank()) {
+                cursor.next();
+            } else if (token.type() == TokenType.COMMENT) {
+                cursor.next();
+            } else {
+                throw new TemplateSyntaxException("Unexpected token inside |switch|: " + token.value());
+            }
+        }
+
+        if (cursor.hasNext() && cursor.peek().type() == TokenType.END_SWITCH) {
+            cursor.next();
+        } else {
+            throw new TemplateSyntaxException("Missing closing |/switch|.");
+        }
+
+        return new io.lemadane.piped.template.engine.ast.SwitchNode(switchExpr, cases, defaultBlock, evaluator);
+    }
+
+    private boolean extractAndCheckFallthrough(ASTNode block) {
+        if (block instanceof BlockNode blockNode) {
+            for (ASTNode child : blockNode.getChildren()) {
+                if (child instanceof io.lemadane.piped.template.engine.ast.FallthroughNode) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     private io.lemadane.piped.template.engine.ast.MacroNode parseMacro(Token macroToken, Cursor cursor) {

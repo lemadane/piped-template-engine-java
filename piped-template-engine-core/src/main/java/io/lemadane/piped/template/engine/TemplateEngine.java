@@ -1094,11 +1094,20 @@ public final class TemplateEngine {
             if (source.startsWith("switch ")) {
                 final var switchExpression = source.substring("switch ".length()).trim();
                 final var switchBlock = findSwitchBlock(template, closingPipeIndex + 1, endIndex);
-                output.append(renderSwitchBlock(
-                        template,
-                        context,
-                        switchExpression,
-                        switchBlock));
+                try {
+                    output.append(renderSwitchBlock(
+                            template,
+                            context,
+                            switchExpression,
+                            switchBlock));
+                } catch (io.lemadane.piped.template.engine.exceptions.LoopContinueException e) {
+                    output.append(e.getPartialOutput());
+                    throw new io.lemadane.piped.template.engine.exceptions.LoopContinueException(output.toString());
+                } catch (io.lemadane.piped.template.engine.exceptions.LoopBreakException e) {
+                    output.append(e.getPartialOutput());
+                    throw new io.lemadane.piped.template.engine.exceptions.LoopBreakException(output.toString());
+                }
+
                 index = switchBlock.endEndIndex();
                 continue;
             }
@@ -1914,6 +1923,7 @@ public final class TemplateEngine {
         int eachDepth = 1;
         int ifDepth = 0;
         int switchDepth = 0;
+        int forDepth = 0;
         int index = searchStartIndex;
 
         int elseStartIndex = -1;
@@ -1953,19 +1963,23 @@ public final class TemplateEngine {
                 ifDepth++;
             } else if ("/if".equals(source)) {
                 ifDepth--;
+            } else if (source.startsWith("for ")) {
+                forDepth++;
+            } else if ("/for".equals(source)) {
+                forDepth--;
             } else if (source.startsWith("each ")) {
                 eachDepth++;
             } else if ("/each".equals(source)) {
                 eachDepth--;
 
-                if (eachDepth == 0 && ifDepth == 0 && switchDepth == 0) {
+                if (eachDepth == 0 && ifDepth == 0 && switchDepth == 0 && forDepth == 0) {
                     return new EachBlock(
                             elseStartIndex,
                             elseEndIndex,
                             openingPipeIndex,
                             closingPipeIndex + 1);
                 }
-            } else if ("else".equals(source) && eachDepth == 1 && ifDepth == 0 && switchDepth == 0) {
+            } else if ("else".equals(source) && eachDepth == 1 && ifDepth == 0 && switchDepth == 0 && forDepth == 0) {
                 if (elseStartIndex != -1) {
                     throw new TemplateSyntaxException(
                             "Only one |else| is allowed inside an |each| block.");
@@ -1985,6 +1999,7 @@ public final class TemplateEngine {
         int switchDepth = 1;
         int ifDepth = 0;
         int eachDepth = 0;
+        int forDepth = 0;
         int index = searchStartIndex;
 
         final var cases = new ArrayList<SwitchCaseBlock>();
@@ -2012,7 +2027,7 @@ public final class TemplateEngine {
 
             final var source = template.substring(openingPipeIndex + 1, closingPipeIndex).trim();
 
-            final var topLevelSwitchControl = switchDepth == 1 && ifDepth == 0 && eachDepth == 0;
+            final var topLevelSwitchControl = switchDepth == 1 && ifDepth == 0 && eachDepth == 0 && forDepth == 0;
 
             if (topLevelSwitchControl && source.startsWith("case ")) {
                 if (defaultBlock != null || currentSection != null && currentSection.defaultSection) {
@@ -2078,12 +2093,16 @@ public final class TemplateEngine {
                 eachDepth++;
             } else if ("/each".equals(source)) {
                 eachDepth--;
+            } else if (source.startsWith("for ")) {
+                forDepth++;
+            } else if ("/for".equals(source)) {
+                forDepth--;
             } else if (source.startsWith("switch ")) {
                 switchDepth++;
             } else if ("/switch".equals(source)) {
                 switchDepth--;
 
-                if (switchDepth == 0 && ifDepth == 0 && eachDepth == 0) {
+                if (switchDepth == 0 && ifDepth == 0 && eachDepth == 0 && forDepth == 0) {
                     if (currentSection != null) {
                         currentSection.bodyEndIndex = openingPipeIndex;
 

@@ -383,6 +383,130 @@ class SwitchTest {
       }
    }
 
+   @Nested
+   @DisplayName("Bytecode compiled switch")
+   class BytecodeSwitchTest {
+      @Test
+      @DisplayName("Compiles and renders switch with matching case")
+      void compilesAndRendersMatchingCase() throws Exception {
+         final var template = engine.compile(
+               """
+                     |switch role|
+                        |case 'admin'|
+                           Admin User
+                        |case 'guest'|
+                           Guest User
+                        |default|
+                           Other
+                     |/switch|
+                     """);
+
+         final var writer = new java.io.StringWriter();
+         template.render(new io.lemadane.piped.template.engine.expression.TemplateContext(Map.of("role", "admin")), writer);
+         final var html = writer.toString();
+         assertTrue(compact(html).contains("Admin User"));
+         assertFalse(compact(html).contains("Guest User"));
+         assertFalse(compact(html).contains("Other"));
+      }
+
+      @Test
+      @DisplayName("Compiles and renders default case when no match")
+      void compilesAndRendersDefaultCase() throws Exception {
+         final var template = engine.compile(
+               """
+                     |switch role|
+                        |case 'admin'|
+                           Admin User
+                        |default|
+                           Default User
+                     |/switch|
+                     """);
+
+         final var writer = new java.io.StringWriter();
+         template.render(new io.lemadane.piped.template.engine.expression.TemplateContext(Map.of("role", "unknown")), writer);
+         final var html = writer.toString();
+         assertTrue(compact(html).contains("Default User"));
+         assertFalse(compact(html).contains("Admin User"));
+      }
+
+      @Test
+      @DisplayName("Compiles and renders fallthrough")
+      void compilesAndRendersFallthrough() throws Exception {
+         final var template = engine.compile(
+               """
+                     |switch level|
+                        |case 1|
+                           Level 1
+                           |fallthrough|
+                        |case 2|
+                           Level 2
+                        |default|
+                           Default Level
+                     |/switch|
+                     """);
+
+         final var writer = new java.io.StringWriter();
+         template.render(new io.lemadane.piped.template.engine.expression.TemplateContext(Map.of("level", 1)), writer);
+         final var html = writer.toString();
+         final var output = compact(html);
+         assertTrue(output.contains("Level 1"));
+         assertTrue(output.contains("Level 2"));
+         assertFalse(output.contains("Default Level"));
+      }
+   }
+
+   @Nested
+   @DisplayName("Switch inside loop with control flow")
+   class SwitchControlFlowTest {
+      @Test
+      @DisplayName("Supports break inside switch case in for loop")
+      void supportsBreakInsideSwitchInForLoop() {
+         final var html = engine.renderString(
+               """
+                     |for i from 1 to 5|
+                        |switch i|
+                           |case 3|
+                              Found three
+                              |break|
+                           |default|
+                              Item |i|
+                        |/switch|
+                     |/for|
+                     """,
+               Map.of());
+
+         final var output = compact(html);
+         assertTrue(output.contains("Item 1"));
+         assertTrue(output.contains("Item 2"));
+         assertTrue(output.contains("Found three"));
+         assertFalse(output.contains("Item 4"));
+         assertFalse(output.contains("Item 5"));
+      }
+
+      @Test
+      @DisplayName("Supports continue inside switch case in for loop")
+      void supportsContinueInsideSwitchInForLoop() {
+         final var html = engine.renderString(
+               """
+                     |for i from 1 to 3|
+                        |switch i|
+                           |case 2|
+                              Skip two
+                              |continue|
+                           |default|
+                              Item |i|
+                        |/switch|
+                     |/for|
+                     """,
+               Map.of());
+
+         final var output = compact(html);
+         assertTrue(output.contains("Item 1"));
+         assertTrue(output.contains("Skip two"));
+         assertTrue(output.contains("Item 3"));
+      }
+   }
+
    private static String compact(String value) {
       return value
             .replaceAll("\\s+", " ")
