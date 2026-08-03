@@ -19,18 +19,20 @@ public class PipedPageContext {
         this.requestUri = request.getRequestURI();
         this.queryString = request.getQueryString();
         this.method = request.getMethod();
-        this.isHTMX = "true".equals(request.getHeader("HX-Request"));
-        this.hxTarget = request.getHeader("HX-Target");
-        this.hxTrigger = request.getHeader("HX-Trigger");
-        this.hxCurrentURL = request.getHeader("HX-Current-URL");
+        this.isHTMX = "true".equalsIgnoreCase(getHeader(request, "HX-Request"));
+        this.hxTarget = getHeader(request, "HX-Target");
+        this.hxTrigger = getHeader(request, "HX-Trigger");
+        this.hxCurrentURL = getHeader(request, "HX-Current-URL");
 
-        // Extract headers
+        // Extract headers (store both original and lower-case keys for flexible access)
         Map<String, String> headerMap = new LinkedHashMap<>();
         Enumeration<String> names = request.getHeaderNames();
         if (names != null) {
             while (names.hasMoreElements()) {
                 String name = names.nextElement();
-                headerMap.put(name, request.getHeader(name));
+                String val = request.getHeader(name);
+                headerMap.put(name, val);
+                headerMap.put(name.toLowerCase(Locale.ROOT), val);
             }
         }
         this.headers = Collections.unmodifiableMap(headerMap);
@@ -39,7 +41,7 @@ public class PipedPageContext {
         Map<String, Object> paramMap = new LinkedHashMap<>();
         request.getParameterMap().forEach((k, v) -> {
             if (v != null && v.length > 0) {
-                paramMap.put(k, v.length == 1 ? v[0] : v);
+                paramMap.put(k, v.length == 1 ? v[0] : String.join(", ", v));
             }
         });
         this.params = Collections.unmodifiableMap(paramMap);
@@ -99,5 +101,13 @@ public class PipedPageContext {
 
     public String getHxCurrentURL() {
         return hxCurrentURL;
+    }
+
+    static String getHeader(HttpServletRequest request, String name) {
+        String val = request.getHeader(name);
+        if (val == null) {
+            val = request.getHeader(name.toLowerCase(Locale.ROOT));
+        }
+        return val;
     }
 }

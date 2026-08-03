@@ -36,4 +36,28 @@ class PageMetadataTest {
         assertEquals("ADMIN", roles.get(0));
         assertEquals("MANAGER", roles.get(1));
     }
+
+    @Test
+    @DisplayName("Page title metadata is accessible inside template during rendering")
+    void rendersMetadataTitleInTemplate() {
+        String template = """
+            |page title = "Dashboard"|
+            <title>|title|</title>
+            """;
+
+        RenderResult result = engine.renderTemplateSource(template, Map.of());
+        assertEquals("<title>Dashboard</title>", result.html().trim());
+    }
+
+    @Test
+    @DisplayName("Explicitly supplied model title overrides metadata title")
+    void modelTitleOverridesMetadataTitle() {
+        String template = """
+            |page title = "Dashboard"|
+            <title>|title|</title>
+            """;
+
+        RenderResult result = engine.renderTemplateSource(template, Map.of("title", "Custom Title"));
+        assertEquals("<title>Custom Title</title>", result.html().trim());
+    }
 }

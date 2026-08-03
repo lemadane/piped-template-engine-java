@@ -131,10 +131,6 @@ public class PipedFileRouteHandlerMapping extends AbstractUrlHandlerMapping {
                 RenderResult result = templateEngine.renderTemplateSource(templateContent, model);
                 Map<String, Object> metadata = result.metadata();
 
-                if (metadata.containsKey("title") && !model.containsKey("title")) {
-                    model.put("title", metadata.get("title"));
-                }
-
                 // Apply custom headers via shared applicator
                 metadataApplicator.apply(metadata, response);
 

@@ -1,0 +1,11 @@
+<div>
+    <p>Query:|page.queryString|</p>
+    <p>Method:|page.method|</p>
+    <p>Param:|page.params.q|</p>
+    <p>Header:|page.headers.x-custom|</p>
+    <p>Session:|page.session.user_id|</p>
+    <p>HTMX:|page.isHTMX|</p>
+    <p>Target:|page.hxTarget|</p>
+    <p>Trigger:|page.hxTrigger|</p>
+    <p>CurrentURL:|page.hxCurrentURL|</p>
+</div>

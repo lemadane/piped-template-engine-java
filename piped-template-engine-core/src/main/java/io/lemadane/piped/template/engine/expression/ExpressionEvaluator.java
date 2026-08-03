@@ -175,6 +175,12 @@ public final class ExpressionEvaluator {
             if (plusIndex != -1) {
                   final var leftExpr = trimmedExpression.substring(0, plusIndex).trim();
                   if (!leftExpr.isEmpty()) {
+                        try {
+                              final var directVal = propertyReader.readPath(trimmedExpression, context);
+                              if (directVal != null) {
+                                    return directVal;
+                              }
+                        } catch (Exception ignored) {}
                         final var leftVal = evaluateValue(leftExpr, context);
                         final var rightVal = evaluateValue(trimmedExpression.substring(plusIndex + 1).trim(), context);
                         if (leftVal instanceof String || rightVal instanceof String) {
@@ -188,6 +194,12 @@ public final class ExpressionEvaluator {
             if (minusIndex != -1) {
                   final var leftExpr = trimmedExpression.substring(0, minusIndex).trim();
                   if (!leftExpr.isEmpty()) {
+                        try {
+                              final var directVal = propertyReader.readPath(trimmedExpression, context);
+                              if (directVal != null) {
+                                    return directVal;
+                              }
+                        } catch (Exception ignored) {}
                         final var leftVal = evaluateValue(leftExpr, context);
                         final var rightVal = evaluateValue(trimmedExpression.substring(minusIndex + 1).trim(), context);
                         return toBigDecimal(leftVal).subtract(toBigDecimal(rightVal));

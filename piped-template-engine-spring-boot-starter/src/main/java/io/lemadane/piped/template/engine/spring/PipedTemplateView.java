@@ -33,11 +33,6 @@ public class PipedTemplateView extends AbstractTemplateView {
         RenderResult result = templateEngine.renderNamedTemplate(viewName, model);
         Map<String, Object> metadata = result.metadata();
 
-        // Prevent conflicts: only add "title" from page metadata if not already present in the model
-        if (metadata.containsKey("title") && !model.containsKey("title")) {
-            model.put("title", metadata.get("title"));
-        }
-
         // Apply metadata response headers
         metadataApplicator.apply(metadata, response);
 

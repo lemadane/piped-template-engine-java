@@ -246,6 +246,11 @@ public final class TemplateEngine {
         Map<String, Object> metadata = compiled.getMetadata();
         ExecutionMode executionMode = getExecutionMode();
 
+        Map<String, Object> effectiveModel = new HashMap<>(model != null ? model : Map.of());
+        if (metadata.containsKey("title") && !effectiveModel.containsKey("title")) {
+            effectiveModel.put("title", metadata.get("title"));
+        }
+
         TemplateContext.EngineRenderDelegate delegate = new TemplateContext.EngineRenderDelegate() {
             @Override
             public String renderStringWithContext(String templateContent, TemplateContext context) {
@@ -258,7 +263,7 @@ public final class TemplateEngine {
             }
         };
 
-        TemplateContext context = new TemplateContext(model)
+        TemplateContext context = new TemplateContext(effectiveModel)
                 .withResolver(templateSourceResolver)
                 .withEngine(delegate);
 
