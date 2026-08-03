@@ -41,7 +41,7 @@ public class PipedTemplateProperties {
     public static class Pwa {
         String registrationMode = "external";
         String registrationScript = "/pte-assets/pwa-register.js";
-        boolean requireNonceForInline = true;
+        boolean requireNonceForInline = false;
 
         public String getRegistrationMode() { return registrationMode; }
         public void setRegistrationMode(String registrationMode) { this.registrationMode = registrationMode; }

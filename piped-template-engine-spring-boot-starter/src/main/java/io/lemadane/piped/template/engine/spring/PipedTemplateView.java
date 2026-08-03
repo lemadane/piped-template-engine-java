@@ -25,6 +25,10 @@ public class PipedTemplateView extends AbstractTemplateView {
 
         String viewName = getUrl();
 
+        if (templateEngine == null) {
+            throw new IllegalStateException("TemplateEngine is not initialized on PipedTemplateView.");
+        }
+
         // Prevent conflicts: only add "page" if not already present
         if (!model.containsKey("page")) {
             model.put("page", new PipedPageContext(request));

@@ -19,6 +19,21 @@
       "name": "spring.pipedtemplate.routing.fail-fast",
       "type": "java.lang.Boolean",
       "description": "Whether route discovery errors cause application startup to fail."
+    },
+    {
+      "name": "spring.pipedtemplate.pwa.registration-mode",
+      "type": "java.lang.String",
+      "description": "PWA service worker registration mode (external or inline)."
+    },
+    {
+      "name": "spring.pipedtemplate.pwa.registration-script",
+      "type": "java.lang.String",
+      "description": "Custom registration script URL for external mode."
+    },
+    {
+      "name": "spring.pipedtemplate.pwa.require-nonce-for-inline",
+      "type": "java.lang.Boolean",
+      "description": "Whether inline PWA registration script tags require a nonce attribute."
     }
   ]
 }
