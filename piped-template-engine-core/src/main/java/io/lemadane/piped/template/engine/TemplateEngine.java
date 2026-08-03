@@ -83,12 +83,20 @@ public final class TemplateEngine {
     final io.lemadane.piped.template.engine.compiler.Parser parser;
     boolean minify = false;
     boolean prettify = false;
+    RenderOptions defaultRenderOptions = RenderOptions.DEFAULT;
 
     public boolean isMinify() { return minify; }
     public void setMinify(boolean minify) { this.minify = minify; }
 
     public boolean isPrettify() { return prettify; }
     public void setPrettify(boolean prettify) { this.prettify = prettify; }
+
+    public RenderOptions getDefaultRenderOptions() { return defaultRenderOptions; }
+    public void setDefaultRenderOptions(RenderOptions defaultRenderOptions) {
+        if (defaultRenderOptions != null) {
+            this.defaultRenderOptions = defaultRenderOptions;
+        }
+    }
 
     public ExecutionMode getExecutionMode() {
         return io.lemadane.piped.template.engine.codegen.InMemoryBytecodeCompiler.isAvailable()
@@ -308,6 +316,7 @@ public final class TemplateEngine {
     }
 
     RenderResult renderTemplateSourceInternal(String templateName, String templateSource, Map<String, Object> model, RenderOptions options) {
+        RenderOptions effectiveOptions = options != null ? options : defaultRenderOptions;
         return executeWithRenderScope(templateName, () -> {
             io.lemadane.piped.template.engine.compiler.CompiledTemplate compiled = compile(templateSource);
             Map<String, Object> metadata = compiled.getMetadata();
@@ -342,9 +351,10 @@ public final class TemplateEngine {
 
             TemplateContext context = new TemplateContext(effectiveModel)
                     .withResolver(templateSourceResolver)
-                    .withEngine(delegate);
+                    .withEngine(delegate)
+                    .withPwaRenderOptions(effectiveOptions.pwaOptions());
 
-            String html = renderStringWithContext(templateSource, context, options);
+            String html = renderStringWithContext(templateSource, context, effectiveOptions);
             return new RenderResult(html, metadata, executionMode);
         });
     }
@@ -423,10 +433,11 @@ public final class TemplateEngine {
     }
 
     public String renderString(String template, Map<String, Object> values) {
-        return renderStringWithResolver(template, values, templateSourceResolver, RenderOptions.DEFAULT);
+        return renderStringWithResolver(template, values, templateSourceResolver, defaultRenderOptions);
     }
 
     public String renderStringWithResolver(String template, Map<String, Object> values, TemplateSourceResolver resolver, RenderOptions options) {
+        RenderOptions effectiveOptions = options != null ? options : defaultRenderOptions;
         TemplateContext.EngineRenderDelegate delegate = new TemplateContext.EngineRenderDelegate() {
             @Override
             public String renderStringWithContext(String templateContent, TemplateContext context) {
@@ -450,8 +461,9 @@ public final class TemplateEngine {
         };
         TemplateContext context = new TemplateContext(values)
                 .withResolver(resolver)
-                .withEngine(delegate);
-        return renderStringWithContext(template, context, options);
+                .withEngine(delegate)
+                .withPwaRenderOptions(effectiveOptions.pwaOptions());
+        return renderStringWithContext(template, context, effectiveOptions);
     }
 
     public String renderComponentTemplate(String template, TemplateContext context) {
@@ -1067,21 +1079,19 @@ public final class TemplateEngine {
                 if (val.startsWith("pwa")) {
                     val = val.substring(3).trim();
                 }
-                java.util.Map<String, String> attrs = parseKeyValuePairs(val);
+                java.util.Map<String, Object> attrs = io.lemadane.piped.template.engine.compiler.DirectiveAttributeParser.parseAttributes("pwa", val);
                 String name = getFirstPWAAttr(attrs, "name", "title", "appName", "app-name", "app_name");
                 String manifest = getFirstPWAAttr(attrs, "manifest", "manifestUrl", "manifest-url", "manifest_url");
                 String theme = getFirstPWAAttr(attrs, "theme", "themeColor", "theme-color", "theme_color");
                 String icon = getFirstPWAAttr(attrs, "icon", "iconUrl", "icon-url", "icon_url", "apple-touch-icon");
                 String sw = getFirstPWAAttr(attrs, "sw", "serviceWorker", "service-worker", "service_worker");
                 String statusColor = getFirstPWAAttr(attrs, "statusColor", "status-color", "status_color", "statusbar-color", "statusbarColor");
+                String registrationScript = getFirstPWAAttr(attrs, "registrationScript", "registration-script", "registration_script");
+                String nonce = getFirstPWAAttr(attrs, "nonce");
+                String mode = getFirstPWAAttr(attrs, "mode", "registrationMode", "registration-mode", "registration_mode");
 
                 var pwaNode = new io.lemadane.piped.template.engine.ast.PWANode(
-                    name,
-                    manifest,
-                    theme,
-                    icon,
-                    sw,
-                    statusColor
+                    name, manifest, theme, icon, sw, statusColor, registrationScript, nonce, mode
                 );
                 java.io.StringWriter swWriter = new java.io.StringWriter();
                 try {
@@ -1382,7 +1392,7 @@ public final class TemplateEngine {
 
             if (isElseIfSource(source)) {
                 throw new TemplateSyntaxException(
-                        "Unexpected |else-if| without matching |if| at index " + index + ".");
+                        "Unexpected |else if| without matching |if| at index " + index + ".");
             }
 
             if ("else".equals(source)) {
@@ -2088,7 +2098,7 @@ public final class TemplateEngine {
 
             if (topLevelIfControl && isElseIfSource(source)) {
                 if (insideElse) {
-                    throw new TemplateSyntaxException("|else-if| is not allowed after |else|.");
+                    throw new TemplateSyntaxException("|else if| is not allowed after |else|.");
                 }
 
                 if (currentElseIfExpression == null) {
@@ -2104,7 +2114,7 @@ public final class TemplateEngine {
                 currentBodyStartIndex = closingPipeIndex + 1;
 
                 if (currentElseIfExpression.isBlank()) {
-                    throw new TemplateSyntaxException("|else-if| expression must not be empty.");
+                    throw new TemplateSyntaxException("|else if| expression must not be empty.");
                 }
 
                 index = closingPipeIndex + 1;
@@ -2180,11 +2190,11 @@ public final class TemplateEngine {
     }
 
     boolean isElseIfSource(String source) {
-        return source.startsWith("else-if ");
+        return source.startsWith("else if ");
     }
 
     String extractElseIfExpression(String source) {
-        return source.substring("else-if ".length()).trim();
+        return source.substring("else if ".length()).trim();
     }
 
     EachBlock findEachBlock(String template, int searchStartIndex, int endIndex) {
@@ -3510,11 +3520,14 @@ public final class TemplateEngine {
         throw new TemplateSyntaxException("Missing closing |/fragment|.");
     }
 
-    String getFirstPWAAttr(java.util.Map<String, String> attrs, String... keys) {
+    String getFirstPWAAttr(java.util.Map<String, ?> attrs, String... keys) {
         for (String key : keys) {
-            String val = attrs.get(key);
-            if (val != null && !val.isEmpty()) {
-                return val;
+            Object val = attrs.get(key);
+            if (val != null) {
+                String str = String.valueOf(val);
+                if (!str.isEmpty()) {
+                    return str;
+                }
             }
         }
         return null;

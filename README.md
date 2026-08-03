@@ -47,7 +47,7 @@ Add your template location rules in `src/main/resources/application.properties`:
 # Classpath-based defaults suitable for executable Spring Boot JARs
 spring.pipedtemplate.prefix=classpath:/pte-templates/
 spring.pipedtemplate.suffix=.pte
-spring.pipedtemplate.fail-fast=true
+spring.pipedtemplate.routing.fail-fast=true
 ```
 
 > **Note**: For production deployments (including packaged executable JARs), use `classpath:/...` paths rather than filesystem paths like `src/main/resources/...`.

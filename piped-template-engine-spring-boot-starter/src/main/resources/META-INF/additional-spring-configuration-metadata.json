@@ -16,7 +16,7 @@
       "description": "View resolver order for Spring MVC."
     },
     {
-      "name": "spring.pipedtemplate.fail-fast",
+      "name": "spring.pipedtemplate.routing.fail-fast",
       "type": "java.lang.Boolean",
       "description": "Whether route discovery errors cause application startup to fail."
     }

@@ -138,12 +138,28 @@ public final class TemplateContext {
         return next;
     }
 
+    io.lemadane.piped.template.engine.options.PwaRenderOptions pwaRenderOptions;
+
+    public io.lemadane.piped.template.engine.options.PwaRenderOptions getPwaRenderOptions() {
+        return pwaRenderOptions;
+    }
+
+    public void setPwaRenderOptions(io.lemadane.piped.template.engine.options.PwaRenderOptions pwaRenderOptions) {
+        this.pwaRenderOptions = pwaRenderOptions;
+    }
+
+    public TemplateContext withPwaRenderOptions(io.lemadane.piped.template.engine.options.PwaRenderOptions pwaRenderOptions) {
+        this.pwaRenderOptions = pwaRenderOptions;
+        return this;
+    }
+
     TemplateContext copyMetadata(TemplateContext target) {
         target.resolver = this.resolver;
         target.engine = this.engine;
         target.sections = this.sections;
         target.slots = this.slots;
         target.activeIncludes = this.activeIncludes;
+        target.pwaRenderOptions = this.pwaRenderOptions;
         return target;
     }
 

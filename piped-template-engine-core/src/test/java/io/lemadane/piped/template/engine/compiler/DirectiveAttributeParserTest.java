@@ -37,6 +37,35 @@ class DirectiveAttributeParserTest {
     }
 
     @Test
+    @DisplayName("Parses array attributes with quoted commas, escaped quotes, and mixed primitive types")
+    void parsesArrayAttributesCorrectly() {
+        Map<String, Object> attrs1 = DirectiveAttributeParser.parseAttributes("page", "roles=['ADMIN,OPS', 'USER']");
+        assertEquals(java.util.List.of("ADMIN,OPS", "USER"), attrs1.get("roles"));
+
+        Map<String, Object> attrs2 = DirectiveAttributeParser.parseAttributes("page", "tags=[\"Java, Spring\", \"HTMX\"]");
+        assertEquals(java.util.List.of("Java, Spring", "HTMX"), attrs2.get("tags"));
+
+        Map<String, Object> attrs3 = DirectiveAttributeParser.parseAttributes("page", "values=[true, false, 42, \"text\"]");
+        assertEquals(java.util.List.of(Boolean.TRUE, Boolean.FALSE, 42, "text"), attrs3.get("values"));
+
+        Map<String, Object> attrs4 = DirectiveAttributeParser.parseAttributes("page", "roles=[]");
+        assertEquals(java.util.Collections.emptyList(), attrs4.get("roles"));
+
+        Map<String, Object> attrs5 = DirectiveAttributeParser.parseAttributes("page", "roles=['ADMIN\\'S_ROLE']");
+        assertEquals(java.util.List.of("ADMIN'S_ROLE"), attrs5.get("roles"));
+    }
+
+    @Test
+    @DisplayName("Rejects unclosed arrays, trailing commas, leading commas, and missing separators")
+    void rejectsMalformedArrayAttributes() {
+        assertThrows(TemplateSyntaxException.class, () -> DirectiveAttributeParser.parseAttributes("page", "roles=['ADMIN'"));
+        assertThrows(TemplateSyntaxException.class, () -> DirectiveAttributeParser.parseAttributes("page", "roles=["));
+        assertThrows(TemplateSyntaxException.class, () -> DirectiveAttributeParser.parseAttributes("page", "roles=['ADMIN',]"));
+        assertThrows(TemplateSyntaxException.class, () -> DirectiveAttributeParser.parseAttributes("page", "roles=[,'ADMIN']"));
+        assertThrows(TemplateSyntaxException.class, () -> DirectiveAttributeParser.parseAttributes("page", "roles=['ADMIN' 'USER']"));
+    }
+
+    @Test
     @DisplayName("Interpreter, AST, and bytecode paths parse and render the same attribute syntax")
     void parityTestAttributeSyntax() {
         String pwaSource = "|pwa name='Task App' theme=\"#112233\" sw='/service-worker.js'|";

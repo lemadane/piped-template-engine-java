@@ -1,6 +1,8 @@
 package io.lemadane.piped.template.engine.ast;
 
+import io.lemadane.piped.template.engine.exceptions.TemplateSyntaxException;
 import io.lemadane.piped.template.engine.expression.TemplateContext;
+import io.lemadane.piped.template.engine.options.PwaRenderOptions;
 import io.lemadane.piped.template.engine.utils.JavaScriptStringEscaper;
 import java.io.IOException;
 import java.io.Writer;
@@ -16,8 +18,9 @@ public final class PWANode implements ASTNode {
     final String statusColor;
     final String registrationScript;
     final String nonce;
+    final String mode;
 
-    public PWANode(String name, String manifest, String theme, String icon, String sw, String statusColor, String registrationScript, String nonce) {
+    public PWANode(String name, String manifest, String theme, String icon, String sw, String statusColor, String registrationScript, String nonce, String mode) {
         this.name = name;
         this.manifest = manifest;
         this.theme = theme;
@@ -26,10 +29,15 @@ public final class PWANode implements ASTNode {
         this.statusColor = statusColor;
         this.registrationScript = registrationScript;
         this.nonce = nonce;
+        this.mode = mode;
+    }
+
+    public PWANode(String name, String manifest, String theme, String icon, String sw, String statusColor, String registrationScript, String nonce) {
+        this(name, manifest, theme, icon, sw, statusColor, registrationScript, nonce, null);
     }
 
     public PWANode(String name, String manifest, String theme, String icon, String sw, String statusColor) {
-        this(name, manifest, theme, icon, sw, statusColor, null, null);
+        this(name, manifest, theme, icon, sw, statusColor, null, null, null);
     }
 
     public String getName() { return name; }
@@ -40,6 +48,7 @@ public final class PWANode implements ASTNode {
     public String getStatusColor() { return statusColor; }
     public String getRegistrationScript() { return registrationScript; }
     public String getNonce() { return nonce; }
+    public String getMode() { return mode; }
 
     @Override
     public void render(TemplateContext context, Writer writer) throws IOException {
@@ -67,16 +76,51 @@ public final class PWANode implements ASTNode {
         }
 
         if (sw != null && !sw.isEmpty()) {
-            if (registrationScript != null && !registrationScript.isEmpty()) {
-                tags.add(String.format("<script src=\"%s\" data-pte-service-worker=\"%s\" defer></script>",
-                        escapeHtml(registrationScript), escapeHtml(sw)));
-            } else {
-                String jsEscapedSw = JavaScriptStringEscaper.escapeJsString(sw);
-                String nonceAttr = "";
-                if (nonce != null && !nonce.isEmpty()) {
-                    Object evaluatedNonce = context != null && context.get(nonce) != null ? context.get(nonce) : nonce;
-                    nonceAttr = String.format(" nonce=\"%s\"", escapeHtml(String.valueOf(evaluatedNonce)));
+            PwaRenderOptions ctxPwa = context != null && context.getPwaRenderOptions() != null
+                    ? context.getPwaRenderOptions()
+                    : PwaRenderOptions.DEFAULT;
+
+            PwaRenderOptions.RegistrationMode effectiveMode;
+            if (mode != null && !mode.isEmpty()) {
+                if ("inline".equalsIgnoreCase(mode)) {
+                    effectiveMode = PwaRenderOptions.RegistrationMode.INLINE;
+                } else if ("external".equalsIgnoreCase(mode)) {
+                    effectiveMode = PwaRenderOptions.RegistrationMode.EXTERNAL;
+                } else {
+                    throw new TemplateSyntaxException("Invalid PWA registration mode: " + mode);
                 }
+            } else if (nonce != null && !nonce.isEmpty()) {
+                effectiveMode = PwaRenderOptions.RegistrationMode.INLINE;
+            } else if (registrationScript != null && !registrationScript.isEmpty()) {
+                effectiveMode = PwaRenderOptions.RegistrationMode.EXTERNAL;
+            } else {
+                effectiveMode = ctxPwa.mode() != null ? ctxPwa.mode() : PwaRenderOptions.RegistrationMode.EXTERNAL;
+            }
+
+            String effectiveRegScript = (registrationScript != null && !registrationScript.isEmpty())
+                    ? registrationScript
+                    : (ctxPwa.registrationScript() != null ? ctxPwa.registrationScript() : "/pte-assets/pwa-register.js");
+
+            boolean requireNonce = ctxPwa.requireNonceForInline();
+
+            if (effectiveMode == PwaRenderOptions.RegistrationMode.EXTERNAL) {
+                tags.add(String.format("<script src=\"%s\" data-pte-service-worker=\"%s\" defer></script>",
+                        escapeHtml(effectiveRegScript), escapeHtml(sw)));
+            } else {
+                String nonceVal = null;
+                if (nonce != null && !nonce.isEmpty()) {
+                    Object eval = context != null ? context.get(nonce) : null;
+                    nonceVal = eval != null ? String.valueOf(eval) : nonce;
+                }
+
+                if ((nonceVal == null || nonceVal.isEmpty()) && requireNonce) {
+                    throw new TemplateSyntaxException("PWA inline registration requires a nonce when requireNonceForInline is enabled.");
+                }
+
+                String jsEscapedSw = JavaScriptStringEscaper.escapeJsString(sw);
+                String nonceAttr = (nonceVal != null && !nonceVal.isEmpty())
+                        ? String.format(" nonce=\"%s\"", escapeHtml(nonceVal))
+                        : "";
                 tags.add(String.format("<script%s>if('serviceWorker' in navigator){if(document.readyState==='complete'){navigator.serviceWorker.register('%s');}else{window.addEventListener('load',function(){navigator.serviceWorker.register('%s');});}}</script>",
                         nonceAttr, jsEscapedSw, jsEscapedSw));
             }
@@ -87,8 +131,7 @@ public final class PWANode implements ASTNode {
 
     String escapeHtml(String s) {
         if (s == null) return "";
-        return s.replace("&", "&amp;")
-                .replace("<", "&lt;")
+        return s.replace("<", "&lt;")
                 .replace(">", "&gt;")
                 .replace("\"", "&quot;")
                 .replace("'", "&#39;");

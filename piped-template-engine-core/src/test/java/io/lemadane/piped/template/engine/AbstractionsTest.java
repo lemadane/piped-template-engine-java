@@ -14,7 +14,7 @@ class AbstractionsTest {
     @Test
     @DisplayName("Renders PWANode correctly in both interpreter and bytecode modes")
     void testPWANode() throws Exception {
-        String template = "|pwa name='TaskMaster' theme='#4f46e5' icon='/icon-192.png' sw='/sw.js'|";
+        String template = "|pwa name='TaskMaster' theme='#4f46e5' icon='/icon-192.png' sw='/sw.js' mode='inline'|";
 
         // Interpreter mode
         String htmlInterp = engine.renderString(template, Map.of());
@@ -37,7 +37,7 @@ class AbstractionsTest {
     @Test
     @DisplayName("Supports kebab-case and camelCase PWA attribute aliases")
     void testPWAAttributeAliases() throws Exception {
-        String template = "|pwa app-name='PWA-App' theme-color='#ff0000' service-worker='/custom-sw.js' status-color='black-translucent'|";
+        String template = "|pwa app-name='PWA-App' theme-color='#ff0000' service-worker='/custom-sw.js' status-color='black-translucent' mode='inline'|";
 
         String html = engine.renderString(template, Map.of());
         assertTrue(html.contains("meta name=\"theme-color\" content=\"#ff0000\""));

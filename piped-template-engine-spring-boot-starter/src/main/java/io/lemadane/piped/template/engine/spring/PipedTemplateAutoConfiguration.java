@@ -47,7 +47,26 @@ public class PipedTemplateAutoConfiguration {
             );
         }
 
-        return new TemplateEngine(resolver);
+        TemplateEngine engine = new TemplateEngine(resolver);
+
+        io.lemadane.piped.template.engine.options.PwaRenderOptions.RegistrationMode pwaMode;
+        String rawMode = properties.getPwa().getRegistrationMode();
+        if ("inline".equalsIgnoreCase(rawMode)) {
+            pwaMode = io.lemadane.piped.template.engine.options.PwaRenderOptions.RegistrationMode.INLINE;
+        } else if ("external".equalsIgnoreCase(rawMode)) {
+            pwaMode = io.lemadane.piped.template.engine.options.PwaRenderOptions.RegistrationMode.EXTERNAL;
+        } else {
+            throw new IllegalArgumentException("Invalid PWA registration mode: " + rawMode);
+        }
+
+        io.lemadane.piped.template.engine.options.PwaRenderOptions pwaOptions = new io.lemadane.piped.template.engine.options.PwaRenderOptions(
+                pwaMode,
+                properties.getPwa().getRegistrationScript(),
+                properties.getPwa().isRequireNonceForInline()
+        );
+
+        engine.setDefaultRenderOptions(new io.lemadane.piped.template.engine.RenderOptions(false, false, pwaOptions));
+        return engine;
     }
 
     @Bean
@@ -79,5 +98,17 @@ public class PipedTemplateAutoConfiguration {
             }
         }
         return mapping;
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(name = "pipedTemplateWebMvcConfigurer")
+    public org.springframework.web.servlet.config.annotation.WebMvcConfigurer pipedTemplateWebMvcConfigurer() {
+        return new org.springframework.web.servlet.config.annotation.WebMvcConfigurer() {
+            @Override
+            public void addResourceHandlers(org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry registry) {
+                registry.addResourceHandler("/pte-assets/**")
+                        .addResourceLocations("classpath:/static/pte-assets/");
+            }
+        };
     }
 }

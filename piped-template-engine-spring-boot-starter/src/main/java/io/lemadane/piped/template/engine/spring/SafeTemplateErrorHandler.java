@@ -24,12 +24,16 @@ public final class SafeTemplateErrorHandler {
         String method = request.getMethod();
 
         int statusCode = HttpServletResponse.SC_INTERNAL_SERVER_ERROR;
-        String message = error != null ? error.getMessage() : "";
-
-        if (message != null && (message.contains("401") || message.toLowerCase().contains("unauthorized"))) {
-            statusCode = HttpServletResponse.SC_UNAUTHORIZED;
-        } else if (message != null && (message.contains("403") || message.toLowerCase().contains("forbidden") || message.toLowerCase().contains("missing role"))) {
-            statusCode = HttpServletResponse.SC_FORBIDDEN;
+        Throwable current = error;
+        while (current != null) {
+            if (current instanceof io.lemadane.piped.template.engine.exceptions.TemplateUnauthorizedException) {
+                statusCode = HttpServletResponse.SC_UNAUTHORIZED;
+                break;
+            } else if (current instanceof io.lemadane.piped.template.engine.exceptions.TemplateForbiddenException) {
+                statusCode = HttpServletResponse.SC_FORBIDDEN;
+                break;
+            }
+            current = current.getCause();
         }
 
         log.error("Template execution failure [Correlation-ID: " + correlationId + "] [" + method + "] " + uri + ": " + (error != null ? error.getMessage() : "Unknown error"), error);

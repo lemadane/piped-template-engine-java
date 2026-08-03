@@ -132,7 +132,7 @@ public class PipedFileRouteHandlerMapping extends AbstractUrlHandlerMapping {
         }
     }
 
-    String convertToSpringUrlPattern(String relativePath, Resource resource) {
+    public String convertToSpringUrlPattern(String relativePath, Resource resource) {
         validateRoutePathBrackets(relativePath);
         String path = relativePath;
         if (path.startsWith("pte-routes/")) {
@@ -157,7 +157,7 @@ public class PipedFileRouteHandlerMapping extends AbstractUrlHandlerMapping {
     }
 
     @SuppressWarnings("unchecked")
-    void registerFileRoute(String urlPattern, String relativePath, Resource resource) {
+    public void registerFileRoute(String urlPattern, String relativePath, Resource resource) {
         validateRoutePathBrackets(relativePath);
         String effectiveUrlPattern = (urlPattern != null && !urlPattern.isBlank()) ? urlPattern : convertToSpringUrlPattern(relativePath, resource);
         registeredPatterns.add(effectiveUrlPattern);
@@ -175,7 +175,7 @@ public class PipedFileRouteHandlerMapping extends AbstractUrlHandlerMapping {
                 // Enforce auth check
                 if (Boolean.TRUE.equals(initialMetadata.get("auth"))) {
                     if (request.getUserPrincipal() == null) {
-                        SafeTemplateErrorHandler.handleError(new RuntimeException("401 Unauthorized"), request, response);
+                        SafeTemplateErrorHandler.handleError(new io.lemadane.piped.template.engine.exceptions.TemplateUnauthorizedException("Authentication required"), request, response);
                         return;
                     }
                 }
@@ -197,7 +197,7 @@ public class PipedFileRouteHandlerMapping extends AbstractUrlHandlerMapping {
                         }
                     }
                     if (!hasRole) {
-                        SafeTemplateErrorHandler.handleError(new RuntimeException("403 Forbidden"), request, response);
+                        SafeTemplateErrorHandler.handleError(new io.lemadane.piped.template.engine.exceptions.TemplateForbiddenException("Required role is missing"), request, response);
                         return;
                     }
                 }

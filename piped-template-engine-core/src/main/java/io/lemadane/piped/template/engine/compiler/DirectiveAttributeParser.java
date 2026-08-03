@@ -76,24 +76,38 @@ public final class DirectiveAttributeParser {
                 int valStart = cursor;
                 boolean inSingle = false;
                 boolean inDouble = false;
+                boolean foundEnd = false;
                 while (cursor < len) {
                     char ch = input.charAt(cursor);
-                    if (ch == '\'' && !inDouble) inSingle = !inSingle;
-                    else if (ch == '"' && !inSingle) inDouble = !inDouble;
-                    else if (!inSingle && !inDouble) {
-                        if (ch == '[') bracketDepth++;
-                        else if (ch == ']') {
+                    if (ch == '\'' && !inDouble) {
+                        if (cursor == 0 || input.charAt(cursor - 1) != '\\') {
+                            inSingle = !inSingle;
+                        }
+                    } else if (ch == '"' && !inSingle) {
+                        if (cursor == 0 || input.charAt(cursor - 1) != '\\') {
+                            inDouble = !inDouble;
+                        }
+                    } else if (!inSingle && !inDouble) {
+                        if (ch == '[') {
+                            bracketDepth++;
+                        } else if (ch == ']') {
                             bracketDepth--;
                             if (bracketDepth == 0) {
                                 cursor++;
+                                foundEnd = true;
                                 break;
                             }
                         }
                     }
                     cursor++;
                 }
+
+                if (!foundEnd || bracketDepth != 0 || inSingle || inDouble) {
+                    throw new TemplateSyntaxException(String.format("Unclosed array for attribute '%s' in |%s|.", key, directiveName));
+                }
+
                 String arrayStr = input.substring(valStart, cursor).trim();
-                value = parseArrayLiteral(arrayStr);
+                value = parseArrayLiteral(directiveName, key, arrayStr);
             } else if (firstChar == '\'' || firstChar == '"') {
                 char quoteChar = firstChar;
                 cursor++;
@@ -156,31 +170,111 @@ public final class DirectiveAttributeParser {
         return result;
     }
 
-    static Object parseArrayLiteral(String arrayStr) {
-        if (arrayStr == null || arrayStr.length() < 2) {
+    static Object parseArrayLiteral(String directiveName, String attributeKey, String arrayStr) {
+        if (arrayStr == null || !arrayStr.startsWith("[") || !arrayStr.endsWith("]")) {
+            throw new TemplateSyntaxException(String.format("Unclosed array for attribute '%s' in |%s|.", attributeKey, directiveName));
+        }
+
+        String inner = arrayStr.substring(1, arrayStr.length() - 1).trim();
+        if (inner.isEmpty()) {
             return java.util.Collections.emptyList();
         }
-        String content = arrayStr.substring(1, arrayStr.length() - 1).trim();
-        if (content.isEmpty()) {
-            return java.util.Collections.emptyList();
-        }
+
         java.util.List<Object> list = new java.util.ArrayList<>();
-        for (String item : content.split(",")) {
-            String trimmed = item.trim();
-            if ((trimmed.startsWith("'") && trimmed.endsWith("'")) || (trimmed.startsWith("\"") && trimmed.endsWith("\""))) {
-                list.add(trimmed.substring(1, trimmed.length() - 1));
-            } else if ("true".equalsIgnoreCase(trimmed)) {
-                list.add(Boolean.TRUE);
-            } else if ("false".equalsIgnoreCase(trimmed)) {
-                list.add(Boolean.FALSE);
-            } else {
-                try {
-                    list.add(Integer.parseInt(trimmed));
-                } catch (Exception e) {
-                    list.add(trimmed);
+        int len = inner.length();
+        int idx = 0;
+        boolean expectingItem = true;
+
+        while (idx < len) {
+            while (idx < len && Character.isWhitespace(inner.charAt(idx))) {
+                idx++;
+            }
+            if (idx >= len) {
+                break;
+            }
+
+            char c = inner.charAt(idx);
+
+            if (c == ',') {
+                if (expectingItem) {
+                    throw new TemplateSyntaxException(String.format("Invalid comma in array for attribute '%s' in |%s|.", attributeKey, directiveName));
                 }
+                expectingItem = true;
+                idx++;
+                continue;
+            }
+
+            if (!expectingItem) {
+                throw new TemplateSyntaxException(String.format("Missing comma separator in array for attribute '%s' in |%s|.", attributeKey, directiveName));
+            }
+
+            if (c == '\'' || c == '"') {
+                char quote = c;
+                idx++;
+                StringBuilder sb = new StringBuilder();
+                boolean closed = false;
+                while (idx < len) {
+                    char ch = inner.charAt(idx);
+                    if (ch == '\\' && idx + 1 < len) {
+                        char next = inner.charAt(idx + 1);
+                        if (next == quote || next == '\\') {
+                            sb.append(next);
+                            idx += 2;
+                            continue;
+                        }
+                    }
+                    if (ch == quote) {
+                        closed = true;
+                        idx++;
+                        break;
+                    }
+                    sb.append(ch);
+                    idx++;
+                }
+                if (!closed) {
+                    throw new TemplateSyntaxException(String.format("Unclosed quote inside array for attribute '%s' in |%s|.", attributeKey, directiveName));
+                }
+                list.add(sb.toString());
+                expectingItem = false;
+            } else {
+                int itemStart = idx;
+                while (idx < len && inner.charAt(idx) != ',' && !Character.isWhitespace(inner.charAt(idx))) {
+                    if (inner.charAt(idx) == '\'' || inner.charAt(idx) == '"') {
+                        throw new TemplateSyntaxException(String.format("Malformed value in array for attribute '%s' in |%s|.", attributeKey, directiveName));
+                    }
+                    idx++;
+                }
+                String token = inner.substring(itemStart, idx).trim();
+                if (token.isEmpty()) {
+                    throw new TemplateSyntaxException(String.format("Invalid value in array for attribute '%s' in |%s|.", attributeKey, directiveName));
+                }
+                if ("true".equalsIgnoreCase(token)) {
+                    list.add(Boolean.TRUE);
+                } else if ("false".equalsIgnoreCase(token)) {
+                    list.add(Boolean.FALSE);
+                } else {
+                    try {
+                        if (token.contains(".")) {
+                            list.add(Double.parseDouble(token));
+                        } else {
+                            try {
+                                list.add(Integer.parseInt(token));
+                            } catch (NumberFormatException nfe) {
+                                list.add(Long.parseLong(token));
+                            }
+                        }
+                    } catch (NumberFormatException nfe) {
+                        list.add(token);
+                    }
+                }
+                expectingItem = false;
             }
         }
+
+        if (expectingItem) {
+            throw new TemplateSyntaxException(String.format("Trailing comma in array for attribute '%s' in |%s|.", attributeKey, directiveName));
+        }
+
         return list;
     }
 

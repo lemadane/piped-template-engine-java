@@ -30,7 +30,7 @@ class SafeRouteErrorHandlingTest {
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/protected");
         MockHttpServletResponse response = new MockHttpServletResponse();
 
-        SafeTemplateErrorHandler.handleError(new RuntimeException("401 Unauthorized access"), request, response);
+        SafeTemplateErrorHandler.handleError(new io.lemadane.piped.template.engine.exceptions.TemplateUnauthorizedException("Unauthorized access"), request, response);
 
         assertEquals(401, response.getStatus());
         assertEquals("Unauthorized", response.getContentAsString());
@@ -42,7 +42,7 @@ class SafeRouteErrorHandlingTest {
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/admin");
         MockHttpServletResponse response = new MockHttpServletResponse();
 
-        SafeTemplateErrorHandler.handleError(new RuntimeException("403 Forbidden - Missing role ADMIN"), request, response);
+        SafeTemplateErrorHandler.handleError(new io.lemadane.piped.template.engine.exceptions.TemplateForbiddenException("Forbidden - Missing role ADMIN"), request, response);
 
         assertEquals(403, response.getStatus());
         assertEquals("Forbidden", response.getContentAsString());

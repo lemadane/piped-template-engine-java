@@ -186,9 +186,7 @@ public final class Parser {
                     throw new TemplateSyntaxException(String.format("|else if| is not allowed after |else| at line %d, column %d.", current.line(), current.column()));
                 }
                 cursor.next();
-                String elseIfCondition = current.value().startsWith("else-if ")
-                        ? current.value().substring("else-if ".length()).trim()
-                        : current.value().substring("else if ".length()).trim();
+                String elseIfCondition = current.value().substring("else if ".length()).trim();
                 if (elseIfCondition.isBlank()) {
                     throw new TemplateSyntaxException(String.format("|else if| condition must not be empty at line %d, column %d.", current.line(), current.column()));
                 }
@@ -793,8 +791,9 @@ public final class Parser {
         String statusColor = getFirstPWAAttr(attrs, "statusColor", "status-color", "status_color", "statusbar-color", "statusbarColor");
         String registrationScript = getFirstPWAAttr(attrs, "registrationScript", "registration-script", "registration_script");
         String nonce = getFirstPWAAttr(attrs, "nonce");
+        String mode = getFirstPWAAttr(attrs, "mode", "registrationMode", "registration-mode", "registration_mode");
 
-        return new PWANode(name, manifest, theme, icon, sw, statusColor, registrationScript, nonce);
+        return new PWANode(name, manifest, theme, icon, sw, statusColor, registrationScript, nonce, mode);
     }
 
     String getFirstPWAAttr(Map<String, Object> attrs, String... keys) {

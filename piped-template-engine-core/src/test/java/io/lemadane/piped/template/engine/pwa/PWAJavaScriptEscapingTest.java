@@ -31,7 +31,7 @@ class PWAJavaScriptEscapingTest {
     @Test
     @DisplayName("PWA directive renders service worker URL with JS escaping rather than HTML entity escaping")
     void testPwaDirectiveJsEscaping() {
-        String template = "|pwa sw='/sw.js?v=1&scope=/app'|";
+        String template = "|pwa sw='/sw.js?v=1&scope=/app' mode='inline'|";
         String html = engine.renderTemplateSource(template, java.util.Map.of()).html();
 
         assertTrue(html.contains("register('/sw.js?v=1&scope=/app')"), "Must contain un-escaped ampersand in JS string");

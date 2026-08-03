@@ -88,7 +88,7 @@ public final class Lexer {
     TokenType classifyToken(String content) {
         if (content.startsWith("if ")) {
             return TokenType.IF;
-        } else if (content.startsWith("else if ") || content.startsWith("else-if ")) {
+        } else if (content.startsWith("else if ")) {
             return TokenType.ELSE_IF;
         } else if ("else".equals(content)) {
             return TokenType.ELSE;

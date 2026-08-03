@@ -6,7 +6,7 @@ import java.util.Set;
 final class TemplateExpressionValidator {
 
     static final Set<String> KNOWN_DIRECTIVES = Set.of(
-            "if", "else", "else if", "else-if", "/if",
+            "if", "else", "else if", "/if",
             "each", "/each", "for", "/for",
             "switch", "/switch", "case", "default", "fallthrough",
             "include", "layout", "section", "/section", "yield",
@@ -29,6 +29,12 @@ final class TemplateExpressionValidator {
 
         String trimmed = content.trim();
         String firstWord = getFirstWord(trimmed);
+
+        if ("else-if".equals(firstWord) || "elseif".equals(firstWord) || trimmed.startsWith("else-if ") || trimmed.startsWith("elseif ")) {
+            throw new TemplateSyntaxException(String.format(
+                    "Unknown directive '|%s|' at line %d, column %d. Did you mean '|else if|'?",
+                    trimmed, line, column));
+        }
 
         if (firstWord.startsWith("/") && !KNOWN_DIRECTIVES.contains(firstWord)) {
             String suggestion = findClosestDirective(firstWord);

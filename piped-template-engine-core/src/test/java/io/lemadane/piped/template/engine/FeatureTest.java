@@ -140,7 +140,7 @@ class FeatureTest {
                """
                      |if user.role == 'admin'|
                         Admin
-                     |else-if user.role == 'manager'|
+                     |else if user.role == 'manager'|
                         Manager
                      |else|
                         User
