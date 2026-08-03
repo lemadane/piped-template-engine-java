@@ -9,7 +9,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class PipedTemplateAutoConfigurationTest {
 
-    private final ApplicationContextRunner contextRunner = new ApplicationContextRunner()
+    final ApplicationContextRunner contextRunner = new ApplicationContextRunner()
             .withConfiguration(AutoConfigurations.of(PipedTemplateAutoConfiguration.class));
 
     @Test

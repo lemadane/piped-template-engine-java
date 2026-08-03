@@ -9,10 +9,10 @@ import java.util.List;
 public final class SwitchNode implements ASTNode {
     public record SwitchCase(String caseExpression, ASTNode body, boolean hasFallthrough) {}
 
-    private final String switchExpression;
-    private final List<SwitchCase> cases;
-    private final ASTNode defaultBlock;
-    private final ExpressionEvaluator evaluator;
+    final String switchExpression;
+    final List<SwitchCase> cases;
+    final ASTNode defaultBlock;
+    final ExpressionEvaluator evaluator;
 
     public SwitchNode(
             String switchExpression,

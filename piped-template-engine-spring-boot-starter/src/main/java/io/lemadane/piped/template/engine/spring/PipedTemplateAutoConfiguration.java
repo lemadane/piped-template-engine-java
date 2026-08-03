@@ -1,6 +1,10 @@
 package io.lemadane.piped.template.engine.spring;
 
 import io.lemadane.piped.template.engine.TemplateEngine;
+import io.lemadane.piped.template.engine.res.ClasspathTemplateSourceResolver;
+import io.lemadane.piped.template.engine.res.CompositeTemplateSourceResolver;
+import io.lemadane.piped.template.engine.res.FileSystemTemplateSourceResolver;
+import io.lemadane.piped.template.engine.res.TemplateSourceResolver;
 import io.lemadane.piped.template.engine.spring.routing.PageDataLoader;
 import io.lemadane.piped.template.engine.spring.routing.PageLoader;
 import io.lemadane.piped.template.engine.spring.routing.PipedFileRouteHandlerMapping;
@@ -19,7 +23,7 @@ import java.nio.file.Path;
 @EnableConfigurationProperties(PipedTemplateProperties.class)
 public class PipedTemplateAutoConfiguration {
 
-    private final PipedTemplateProperties properties;
+    final PipedTemplateProperties properties;
 
     public PipedTemplateAutoConfiguration(PipedTemplateProperties properties) {
         this.properties = properties;
@@ -28,7 +32,22 @@ public class PipedTemplateAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean
     public TemplateEngine pipedTemplateEngine() {
-        return new TemplateEngine(Path.of(properties.getPrefix()));
+        String prefix = properties.getPrefix();
+        String suffix = properties.getSuffix();
+
+        TemplateSourceResolver resolver;
+        if (prefix != null && prefix.startsWith("classpath:")) {
+            resolver = new ClasspathTemplateSourceResolver(prefix, suffix);
+        } else if (prefix != null && prefix.startsWith("file:")) {
+            resolver = new FileSystemTemplateSourceResolver(prefix, suffix);
+        } else {
+            resolver = new CompositeTemplateSourceResolver(
+                new ClasspathTemplateSourceResolver(prefix != null ? prefix : "classpath:/pte-templates/", suffix),
+                new FileSystemTemplateSourceResolver(prefix != null ? prefix : ".", suffix)
+            );
+        }
+
+        return new TemplateEngine(resolver);
     }
 
     @Bean

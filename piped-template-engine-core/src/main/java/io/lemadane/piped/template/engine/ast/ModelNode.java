@@ -5,7 +5,7 @@ import java.io.IOException;
 import java.io.Writer;
 
 public final class ModelNode implements ASTNode {
-    private final String modelClassName;
+    final String modelClassName;
 
     public ModelNode(String modelClassName) {
         this.modelClassName = modelClassName;

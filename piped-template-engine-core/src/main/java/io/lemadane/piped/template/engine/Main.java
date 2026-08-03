@@ -5,7 +5,7 @@ import java.util.List;
 import java.util.Map;
 
 public class Main {
-   private Main() {
+   Main() {
    }
 
    public static void main(String[] args) {

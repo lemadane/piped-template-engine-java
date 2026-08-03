@@ -6,9 +6,9 @@ import java.io.Writer;
 import java.io.StringWriter;
 
 public final class AttemptNode implements ASTNode {
-    private final ASTNode body;
-    private final ASTNode recoverBlock;
-    private final String errorVarName;
+    final ASTNode body;
+    final ASTNode recoverBlock;
+    final String errorVarName;
 
     public AttemptNode(ASTNode body, ASTNode recoverBlock, String errorVarName) {
         this.body = body;

@@ -21,7 +21,7 @@ import org.junit.jupiter.api.io.TempDir;
 import io.lemadane.piped.template.engine.exceptions.TemplateSyntaxException;
 
 class ConditionalOutputTest {
-    private final TemplateEngine engine = new TemplateEngine();
+    final TemplateEngine engine = new TemplateEngine();
 
     @Nested
     @DisplayName("Default conditional output")
@@ -785,7 +785,7 @@ class ConditionalOutputTest {
             assertTrue(html.contains("Dashboard"));
         }
 
-        private String render(String templateName, String templateContent, Map<String, Object> model)
+        String render(String templateName, String templateContent, Map<String, Object> model)
                 throws IOException {
             Files.writeString(templateRoot.resolve(templateName + ".pte"), templateContent);
 
@@ -794,7 +794,7 @@ class ConditionalOutputTest {
             return engine.render(templateName, model);
         }
 
-        private record User(
+        record User(
                 boolean subscribed,
                 String role) {
         }
@@ -804,7 +804,7 @@ class ConditionalOutputTest {
     @Nested
     @DisplayName("Conditional attribute literal coverage")
     class ConditionalAttributeLiteralCoverageTest {
-        private static final List<String> ATTRIBUTE_LITERALS = List.of(
+        static final List<String> ATTRIBUTE_LITERALS = List.of(
                 "allowfullscreen",
                 "async",
                 "autofocus",
@@ -949,7 +949,7 @@ class ConditionalOutputTest {
         }
     }
 
-    private static String compact(String value) {
+    static String compact(String value) {
         return value
                 .replaceAll("\\s+", " ")
                 .trim();

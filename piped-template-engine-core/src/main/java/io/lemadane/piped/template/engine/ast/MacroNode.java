@@ -6,9 +6,9 @@ import java.io.Writer;
 import java.util.List;
 
 public final class MacroNode implements ASTNode {
-    private final String name;
-    private final List<String> parameters;
-    private final ASTNode body;
+    final String name;
+    final List<String> parameters;
+    final ASTNode body;
 
     public MacroNode(String name, List<String> parameters, ASTNode body) {
         this.name = name;

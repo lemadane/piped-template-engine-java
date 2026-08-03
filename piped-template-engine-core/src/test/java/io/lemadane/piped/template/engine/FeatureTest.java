@@ -14,7 +14,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 class FeatureTest {
-   private final TemplateEngine engine = new TemplateEngine();
+   final TemplateEngine engine = new TemplateEngine();
 
    @Nested
    class OutputModesTest {
@@ -438,7 +438,7 @@ class FeatureTest {
       }
    }
 
-   private static String compact(String value) {
+   static String compact(String value) {
       return value
             .replaceAll("\\s+", " ")
             .trim();

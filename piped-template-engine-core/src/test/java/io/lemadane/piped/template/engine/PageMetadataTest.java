@@ -8,7 +8,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;
 
 class PageMetadataTest {
-    private final TemplateEngine engine = new TemplateEngine();
+    final TemplateEngine engine = new TemplateEngine();
 
     @Test
     @DisplayName("Parses different types of metadata options successfully")

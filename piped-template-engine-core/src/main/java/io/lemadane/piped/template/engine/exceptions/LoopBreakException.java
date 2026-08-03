@@ -1,7 +1,7 @@
 package io.lemadane.piped.template.engine.exceptions;
 
 public final class LoopBreakException extends RuntimeException {
-    private final String partialOutput;
+    final String partialOutput;
 
     public LoopBreakException() {
         this("");

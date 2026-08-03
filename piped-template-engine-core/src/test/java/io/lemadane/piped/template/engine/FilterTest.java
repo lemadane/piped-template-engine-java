@@ -13,7 +13,7 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
 class FilterTest {
-   private final TemplateEngine engine = new TemplateEngine();
+   final TemplateEngine engine = new TemplateEngine();
 
    @Nested
    @DisplayName("Text filters")
@@ -492,7 +492,7 @@ class FilterTest {
       }
    }
 
-   private static String compact(String value) {
+   static String compact(String value) {
       return value
             .replaceAll("\\s+", " ")
             .trim();

@@ -4,16 +4,16 @@ import jakarta.servlet.http.HttpServletRequest;
 import java.util.*;
 
 public class PipedPageContext {
-    private final String requestUri;
-    private final String queryString;
-    private final String method;
-    private final Map<String, String> headers;
-    private final Map<String, Object> params;
-    private final Map<String, Object> session;
-    private final boolean isHTMX;
-    private final String hxTarget;
-    private final String hxTrigger;
-    private final String hxCurrentURL;
+    final String requestUri;
+    final String queryString;
+    final String method;
+    final Map<String, String> headers;
+    final Map<String, Object> params;
+    final Map<String, Object> session;
+    final boolean isHTMX;
+    final String hxTarget;
+    final String hxTrigger;
+    final String hxCurrentURL;
 
     public PipedPageContext(HttpServletRequest request) {
         this.requestUri = request.getRequestURI();

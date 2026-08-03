@@ -18,6 +18,7 @@ import io.lemadane.piped.template.engine.escapers.AttributeEscaper;
 import io.lemadane.piped.template.engine.escapers.HtmlEscaper;
 import io.lemadane.piped.template.engine.escapers.JsonEscaper;
 import io.lemadane.piped.template.engine.escapers.UrlEscaper;
+import io.lemadane.piped.template.engine.exceptions.TemplateNotFoundException;
 import io.lemadane.piped.template.engine.exceptions.TemplateRenderException;
 import io.lemadane.piped.template.engine.exceptions.TemplateSyntaxException;
 import io.lemadane.piped.template.engine.expression.ExpressionEvaluator;
@@ -26,10 +27,16 @@ import io.lemadane.piped.template.engine.expression.TemplateContext;
 import io.lemadane.piped.template.engine.metadata.EachMetadata;
 import io.lemadane.piped.template.engine.parsers.EachStatementParser;
 import io.lemadane.piped.template.engine.parsers.OutputExpressionParser;
+import io.lemadane.piped.template.engine.res.*;
 import io.lemadane.piped.template.engine.statements.EachStatement;
 
 public final class TemplateEngine {
-    private static final Set<String> CONDITIONAL_ATTRIBUTE_LITERALS = Set.of(
+    public enum ExecutionMode {
+        BYTECODE,
+        AST_FALLBACK
+    }
+
+    static final Set<String> CONDITIONAL_ATTRIBUTE_LITERALS = Set.of(
             "allowfullscreen",
             "async",
             "autofocus",
@@ -57,24 +64,25 @@ public final class TemplateEngine {
             "selected",
             "aria-current");
 
-    private final ExpressionEvaluator expressionEvaluator;
-    private final OutputExpressionParser outputExpressionParser;
-    private final EachStatementParser eachStatementParser;
-    private final HtmlEscaper htmlEscaper;
-    private final AttributeEscaper attributeEscaper;
-    private final UrlEscaper urlEscaper;
-    private final JsonEscaper jsonEscaper;
-    private final Path templateRoot;
-    private final ThreadLocal<ArrayDeque<String>> templateStack;
-    private final ThreadLocal<ArrayDeque<Map<String, String>>> sectionStack;
-    private final ThreadLocal<ArrayDeque<Map<String, String>>> slotStack;
-    private final ThreadLocal<Integer> loopDepth;
-    private final Map<String, String> includedTemplates;
-    private final io.lemadane.piped.template.engine.compiler.TemplateCache templateCache;
-    private final io.lemadane.piped.template.engine.compiler.Lexer lexer;
-    private final io.lemadane.piped.template.engine.compiler.Parser parser;
-    private boolean minify = false;
-    private boolean prettify = false;
+    final ExpressionEvaluator expressionEvaluator;
+    final OutputExpressionParser outputExpressionParser;
+    final EachStatementParser eachStatementParser;
+    final HtmlEscaper htmlEscaper;
+    final AttributeEscaper attributeEscaper;
+    final UrlEscaper urlEscaper;
+    final JsonEscaper jsonEscaper;
+    final Path templateRoot;
+    final ThreadLocal<ArrayDeque<String>> templateStack;
+    final ThreadLocal<ArrayDeque<Map<String, String>>> sectionStack;
+    final ThreadLocal<ArrayDeque<Map<String, String>>> slotStack;
+    final ThreadLocal<Integer> loopDepth;
+    final Map<String, String> includedTemplates;
+    final TemplateSourceResolver templateSourceResolver;
+    final io.lemadane.piped.template.engine.compiler.TemplateCache templateCache;
+    final io.lemadane.piped.template.engine.compiler.Lexer lexer;
+    final io.lemadane.piped.template.engine.compiler.Parser parser;
+    boolean minify = false;
+    boolean prettify = false;
 
     public boolean isMinify() { return minify; }
     public void setMinify(boolean minify) { this.minify = minify; }
@@ -82,19 +90,33 @@ public final class TemplateEngine {
     public boolean isPrettify() { return prettify; }
     public void setPrettify(boolean prettify) { this.prettify = prettify; }
 
+    public ExecutionMode getExecutionMode() {
+        return io.lemadane.piped.template.engine.codegen.InMemoryBytecodeCompiler.isAvailable()
+                ? ExecutionMode.BYTECODE
+                : ExecutionMode.AST_FALLBACK;
+    }
+
     public TemplateEngine() {
-        this(null, Map.of());
+        this(null, Map.of(), null);
     }
 
     public TemplateEngine(Path templateRoot) {
-        this(templateRoot, Map.of());
+        this(templateRoot, Map.of(), null);
     }
 
     public TemplateEngine(Map<String, String> includedTemplates) {
-        this(null, includedTemplates);
+        this(null, includedTemplates, null);
     }
 
     public TemplateEngine(Path templateRoot, Map<String, String> includedTemplates) {
+        this(templateRoot, includedTemplates, null);
+    }
+
+    public TemplateEngine(TemplateSourceResolver customResolver) {
+        this(null, Map.of(), customResolver);
+    }
+
+    public TemplateEngine(Path templateRoot, Map<String, String> includedTemplates, TemplateSourceResolver customResolver) {
         this.expressionEvaluator = new ExpressionEvaluator();
         this.outputExpressionParser = new OutputExpressionParser();
         this.eachStatementParser = new EachStatementParser();
@@ -105,24 +127,30 @@ public final class TemplateEngine {
         this.templateCache = new io.lemadane.piped.template.engine.compiler.TemplateCache();
         this.lexer = new io.lemadane.piped.template.engine.compiler.Lexer();
         this.parser = new io.lemadane.piped.template.engine.compiler.Parser();
-        this.templateRoot = (templateRoot == null
-                ? Path.of("src/main/resources/pte-templates")
-                : templateRoot).toAbsolutePath().normalize();
-        if (!Files.exists(this.templateRoot)) {
-            try {
-                Files.createDirectories(this.templateRoot);
-            } catch (IOException exception) {
-                throw new TemplateRenderException(
-                        "Failed to create template directory: "
-                                + this.templateRoot,
-                        exception);
-            }
-        }
+        Path rootPath = templateRoot != null ? templateRoot.toAbsolutePath().normalize() : Path.of("src/main/resources/pte-templates").toAbsolutePath().normalize();
+        this.templateRoot = rootPath;
+
         this.templateStack = ThreadLocal.withInitial(ArrayDeque::new);
         this.sectionStack = ThreadLocal.withInitial(ArrayDeque::new);
         this.slotStack = ThreadLocal.withInitial(ArrayDeque::new);
         this.loopDepth = ThreadLocal.withInitial(() -> 0);
         this.includedTemplates = normalizeIncludedTemplates(includedTemplates);
+
+        List<TemplateSourceResolver> resolvers = new ArrayList<>();
+        if (customResolver != null) {
+            resolvers.add(customResolver);
+        }
+        if (this.includedTemplates != null && !this.includedTemplates.isEmpty()) {
+            resolvers.add(new InMemoryTemplateSourceResolver(this.includedTemplates));
+        }
+        resolvers.add(new FileSystemTemplateSourceResolver(rootPath.toString(), ".pte"));
+        resolvers.add(new ClasspathTemplateSourceResolver("classpath:/pte-templates/", ".pte"));
+
+        this.templateSourceResolver = new CompositeTemplateSourceResolver(resolvers);
+    }
+
+    public TemplateSourceResolver getTemplateSourceResolver() {
+        return templateSourceResolver;
     }
 
     public io.lemadane.piped.template.engine.compiler.CompiledTemplate compile(String template) {
@@ -148,23 +176,56 @@ public final class TemplateEngine {
             Class<?> clazz = new io.lemadane.piped.template.engine.codegen.InMemoryBytecodeCompiler().compile(className, javaSource);
             return (io.lemadane.piped.template.engine.codegen.CompiledTemplateExecutable) clazz.getDeclaredConstructor().newInstance();
         } catch (Exception e) {
-            return (context, writer, engine) -> {
-                try {
-                    compile(template).render(context, writer);
-                } catch (IOException ex) {
-                    throw new RuntimeException(ex);
-                }
-            };
+            if (e instanceof TemplateSyntaxException || e instanceof TemplateRenderException) {
+                throw (RuntimeException) e;
+            }
+            throw new TemplateRenderException("Bytecode code-generation or compilation failed for template", e);
         }
     }
 
+    public boolean evaluateBoolean(String expression, TemplateContext context) {
+        return expressionEvaluator.evaluateBoolean(expression, context);
+    }
+
     public String evaluateExpression(String expression, String modeName, TemplateContext context) {
-        OutputMode mode = OutputMode.valueOf(modeName);
-        Object value = expressionEvaluator.evaluate(expression, context);
+        return evaluateExpression(expression, modeName, context, null);
+    }
+
+    public String evaluateExpression(String expression, String modeName, TemplateContext context, java.io.Writer writer) {
+        OutputMode defaultMode = OutputMode.valueOf(modeName);
+        var conditionalOutputExpression = parseConditionalOutputExpression(expression);
+        var outputExpression = outputExpressionParser.parse(conditionalOutputExpression.outputSource());
+        OutputMode mode = defaultMode != OutputMode.HTML_ESCAPED ? defaultMode : outputExpression.mode();
+
+        if (conditionalOutputExpression.conditionExpression() != null
+                && !expressionEvaluator.evaluateBoolean(conditionalOutputExpression.conditionExpression(), context)) {
+            if (mode == OutputMode.ATTRIBUTE_ESCAPED && writer instanceof java.io.StringWriter sw) {
+                StringBuffer sb = sw.getBuffer();
+                while (sb.length() > 0 && Character.isWhitespace(sb.charAt(sb.length() - 1))) {
+                    sb.deleteCharAt(sb.length() - 1);
+                }
+            }
+            return "";
+        }
+
+        if (conditionalOutputExpression.conditionExpression() != null && mode == OutputMode.ATTRIBUTE_ESCAPED) {
+            String attributeOutput = renderConditionalAttributeOutput(outputExpression.expression(), context);
+            if (attributeOutput != null) {
+                if (writer instanceof java.io.StringWriter sw) {
+                    StringBuffer sb = sw.getBuffer();
+                    if (sb.length() > 0 && sb.charAt(sb.length() - 1) != ' ' && sb.charAt(sb.length() - 1) != '<') {
+                        sb.append(' ');
+                    }
+                }
+                return attributeOutput;
+            }
+        }
+
+        Object value = expressionEvaluator.evaluate(outputExpression.expression(), context);
         return renderValue(mode, value);
     }
 
-    private Map<String, String> normalizeIncludedTemplates(Map<String, String> includedTemplates) {
+    Map<String, String> normalizeIncludedTemplates(Map<String, String> includedTemplates) {
         if (includedTemplates == null || includedTemplates.isEmpty()) {
             return Map.of();
         }
@@ -180,18 +241,120 @@ public final class TemplateEngine {
         return Collections.unmodifiableMap(values);
     }
 
-    public String render(String templateOrTemplateName, Map<String, Object> values) {
-        final var context = new TemplateContext(values);
+    public String renderNamedTemplate(String templateName, Map<String, Object> model, RenderOptions options) {
+        TemplateSource source = templateSourceResolver.resolve(templateName);
+        return renderStringWithResolver(source.getContent(), model, templateSourceResolver, options);
+    }
 
-        if (templateRoot != null && isTemplateReference(templateOrTemplateName)) {
-            return renderNamedTemplate(templateOrTemplateName, context);
+    public String renderNamedTemplate(String templateName, TemplateContext context) {
+        TemplateSource source = templateSourceResolver.resolve(templateName);
+        if (context.getResolver() == null) {
+            context = context.withResolver(templateSourceResolver);
         }
+        if (context.getEngine() == null) {
+            TemplateContext.EngineRenderDelegate delegate = new TemplateContext.EngineRenderDelegate() {
+                @Override
+                public String renderStringWithContext(String templateContent, TemplateContext context) {
+                    return TemplateEngine.this.renderStringWithContext(templateContent, context);
+                }
+                @Override
+                public String renderComponentTemplate(String templateContent, TemplateContext context) {
+                    return TemplateEngine.this.renderComponentTemplate(templateContent, context);
+                }
+            };
+            context = context.withEngine(delegate);
+        }
+        return renderStringWithContext(source.getContent(), context);
+    }
 
-        return renderTemplateSource(templateOrTemplateName, context);
+    public String render(String templateOrTemplateName, Map<String, Object> values) {
+        TemplateSource source = null;
+        if (isTemplateReference(templateOrTemplateName)) {
+            try {
+                source = templateSourceResolver.resolve(templateOrTemplateName);
+            } catch (TemplateNotFoundException ignored) {
+            }
+        }
+        if (source != null) {
+            return renderStringWithResolver(source.getContent(), values, templateSourceResolver, RenderOptions.DEFAULT);
+        }
+        return renderString(templateOrTemplateName, values);
     }
 
     public String renderString(String template, Map<String, Object> values) {
-        return renderTemplateSource(template, new TemplateContext(values));
+        return renderStringWithResolver(template, values, templateSourceResolver, RenderOptions.DEFAULT);
+    }
+
+    public String renderStringWithResolver(String template, Map<String, Object> values, TemplateSourceResolver resolver, RenderOptions options) {
+        TemplateContext.EngineRenderDelegate delegate = new TemplateContext.EngineRenderDelegate() {
+            @Override
+            public String renderStringWithContext(String templateContent, TemplateContext context) {
+                return TemplateEngine.this.renderStringWithContext(templateContent, context);
+            }
+            @Override
+            public String renderComponentTemplate(String templateContent, TemplateContext context) {
+                return TemplateEngine.this.renderComponentTemplate(templateContent, context);
+            }
+        };
+        TemplateContext context = new TemplateContext(values)
+                .withResolver(resolver)
+                .withEngine(delegate);
+        return renderStringWithContext(template, context, options);
+    }
+
+    public String renderComponentTemplate(String template, TemplateContext context) {
+        List<io.lemadane.piped.template.engine.compiler.Token> tokens = lexer.tokenize(template);
+        var compiled = parser.parse(tokens, true);
+        java.io.StringWriter writer = new java.io.StringWriter();
+        try {
+            compiled.render(context, writer);
+        } catch (IOException e) {
+            throw new TemplateRenderException("Failed to render component template", e);
+        }
+        return writer.toString();
+    }
+
+    public String renderStringWithContext(String template, TemplateContext context) {
+        return renderStringWithContext(template, context, RenderOptions.DEFAULT);
+    }
+
+    public String renderStringWithContext(String template, TemplateContext context, RenderOptions options) {
+        var executable = compileToBytecode(template);
+        java.io.StringWriter writer = new java.io.StringWriter();
+        try {
+            executable.render(context, writer, this);
+        } catch (IOException e) {
+            throw new TemplateRenderException("Failed to render template execution", e);
+        }
+        String output = writer.toString();
+
+        boolean useMinify = options.minify() || this.minify;
+        boolean usePrettify = options.prettify() || this.prettify;
+
+        if (useMinify) {
+            output = io.lemadane.piped.template.engine.utils.HtmlFormatter.minifyHtml(output);
+        } else if (usePrettify) {
+            output = io.lemadane.piped.template.engine.utils.HtmlFormatter.prettifyHtml(output);
+        }
+
+        return output;
+    }
+
+    public String loadTemplateSource(String templateOrTemplateName) {
+        if (templateOrTemplateName == null) {
+            return "";
+        }
+        if (!isTemplateReference(templateOrTemplateName)) {
+            return templateOrTemplateName;
+        }
+        try {
+            return templateSourceResolver.resolve(templateOrTemplateName).getContent();
+        } catch (Exception e) {
+            if (!templateOrTemplateName.endsWith(".pte") && !templateOrTemplateName.contains("/") && !templateOrTemplateName.contains("\\")) {
+                return templateOrTemplateName;
+            }
+            throw e;
+        }
     }
 
     public String renderPartial(String templateName, Object value) {
@@ -218,7 +381,7 @@ public final class TemplateEngine {
         return sw.toString();
     }
 
-    private io.lemadane.piped.template.engine.ast.FragmentNode findFragmentNode(io.lemadane.piped.template.engine.ast.ASTNode node, String name) {
+    io.lemadane.piped.template.engine.ast.FragmentNode findFragmentNode(io.lemadane.piped.template.engine.ast.ASTNode node, String name) {
         if (node == null) {
             return null;
         }
@@ -260,24 +423,9 @@ public final class TemplateEngine {
         return null;
     }
 
-    private String loadTemplateSource(String templateOrTemplateName) {
-        if (templateRoot != null && isTemplateReference(templateOrTemplateName)) {
-            String normalizedTemplateName = normalizeTemplateName(templateOrTemplateName);
-            String inMemoryTemplate = includedTemplates.get(normalizedTemplateName);
-            if (inMemoryTemplate != null) {
-                return inMemoryTemplate;
-            }
-            try {
-                var templatePath = resolveTemplatePath(normalizedTemplateName);
-                return Files.readString(templatePath, java.nio.charset.StandardCharsets.UTF_8);
-            } catch (IOException e) {
-                throw new TemplateRenderException("Failed to load template: " + normalizedTemplateName, e);
-            }
-        }
-        return templateOrTemplateName;
-    }
 
-    private String renderTemplateSource(String template, TemplateContext context) {
+
+    String renderTemplateSource(String template, TemplateContext context) {
         final var layoutDirective = findLayoutDirective(template);
 
         String result;
@@ -295,7 +443,7 @@ public final class TemplateEngine {
         return result;
     }
 
-    private String renderInclude(String source, TemplateContext context) {
+    String renderInclude(String source, TemplateContext context) {
         final var includeStatement = parseIncludeStatement(source);
 
         if (includeStatement.modelExpression() == null) {
@@ -309,7 +457,7 @@ public final class TemplateEngine {
                 createContextFromValue(value));
     }
 
-    private IncludeStatement parseIncludeStatement(String source) {
+    IncludeStatement parseIncludeStatement(String source) {
         final var body = source.substring("include ".length()).trim();
 
         if (body.isBlank()) {
@@ -350,7 +498,7 @@ public final class TemplateEngine {
                 modelExpression);
     }
 
-    private int findIncludeWithIndex(String body) {
+    int findIncludeWithIndex(String body) {
         boolean insideSingleQuote = false;
         boolean insideDoubleQuote = false;
         int parenthesisDepth = 0;
@@ -390,48 +538,9 @@ public final class TemplateEngine {
         return -1;
     }
 
-    private String renderNamedTemplate(String templateName, TemplateContext context) {
-        final var normalizedTemplateName = normalizeTemplateName(templateName);
-        final var stack = templateStack.get();
-        final var outermostRender = stack.isEmpty();
 
-        if (stack.contains(normalizedTemplateName)) {
-            throw new TemplateRenderException(
-                    "Circular include detected: " + buildCircularIncludeMessage(stack, normalizedTemplateName));
-        }
 
-        stack.addLast(normalizedTemplateName);
-
-        try {
-            final var inMemoryTemplate = includedTemplates.get(normalizedTemplateName);
-
-            if (inMemoryTemplate != null) {
-                return renderTemplateSource(inMemoryTemplate, context);
-            }
-
-            if (templateRoot == null) {
-                throw new TemplateRenderException(
-                        "Included template not found: " + normalizedTemplateName);
-            }
-
-            final var templatePath = resolveTemplatePath(normalizedTemplateName);
-            final var templateSource = Files.readString(templatePath, StandardCharsets.UTF_8);
-
-            return renderTemplateSource(templateSource, context);
-        } catch (IOException exception) {
-            throw new TemplateRenderException(
-                    "Failed to load template: " + normalizedTemplateName,
-                    exception);
-        } finally {
-            stack.removeLast();
-
-            if (outermostRender) {
-                stack.clear();
-            }
-        }
-    }
-
-    private Path resolveTemplatePath(String templateName) {
+    Path resolveTemplatePath(String templateName) {
         final var relativePath = Path.of(templateName + ".pte");
 
         if (relativePath.isAbsolute()) {
@@ -447,7 +556,7 @@ public final class TemplateEngine {
         return resolvedPath;
     }
 
-    private String normalizeTemplateName(String templateName) {
+    String normalizeTemplateName(String templateName) {
         final var normalizedName = templateName.trim()
                 .replace('\\', '/');
 
@@ -466,7 +575,7 @@ public final class TemplateEngine {
         return normalizedName;
     }
 
-    private String buildCircularIncludeMessage(ArrayDeque<String> stack, String repeatedTemplateName) {
+    String buildCircularIncludeMessage(ArrayDeque<String> stack, String repeatedTemplateName) {
         final var message = new StringBuilder();
 
         for (final var templateName : stack) {
@@ -478,13 +587,13 @@ public final class TemplateEngine {
         return message.toString();
     }
 
-    private boolean isTemplateReference(String value) {
+    boolean isTemplateReference(String value) {
         return !value.contains("|")
                 && !value.contains("\n")
                 && !value.contains("<");
     }
 
-    private TemplateContext createContextFromValue(Object value) {
+    TemplateContext createContextFromValue(Object value) {
         if (value == null) {
             return new TemplateContext(Map.of());
         }
@@ -503,12 +612,12 @@ public final class TemplateEngine {
                 "it", value));
     }
 
-    private record IncludeStatement(
+    record IncludeStatement(
             String templateName,
             String modelExpression) {
     }
 
-    private String renderRange(
+    String renderRange(
             String template,
             TemplateContext context,
             int startIndex,
@@ -1193,7 +1302,7 @@ public final class TemplateEngine {
         return output.toString();
     }
 
-    private String renderIfBlock(
+    String renderIfBlock(
             String template,
             TemplateContext context,
             String ifExpression,
@@ -1228,7 +1337,7 @@ public final class TemplateEngine {
                 ifBlock.elseBlock().bodyEndIndex());
     }
 
-    private String renderEachBlock(
+    String renderEachBlock(
             String template,
             TemplateContext context,
             EachStatement eachStatement,
@@ -1257,7 +1366,7 @@ public final class TemplateEngine {
                 collectionValue);
     }
 
-    private String renderCollectionEachBlock(
+    String renderCollectionEachBlock(
             String template,
             TemplateContext context,
             EachStatement eachStatement,
@@ -1322,7 +1431,7 @@ public final class TemplateEngine {
         return output.toString();
     }
 
-    private String renderMapEntryEachBlock(
+    String renderMapEntryEachBlock(
             String template,
             TemplateContext context,
             EachStatement eachStatement,
@@ -1377,7 +1486,7 @@ public final class TemplateEngine {
         return output.toString();
     }
 
-    private String renderMapEachBlock(
+    String renderMapEachBlock(
             String template,
             TemplateContext context,
             EachStatement eachStatement,
@@ -1452,7 +1561,7 @@ public final class TemplateEngine {
         return output.toString();
     }
 
-    private record ForBlock(
+    record ForBlock(
             int elseStartIndex,
             int elseEndIndex,
             int endStartIndex,
@@ -1462,7 +1571,7 @@ public final class TemplateEngine {
         }
     }
 
-    private ForBlock findForBlock(String template, int searchStartIndex, int endIndex) {
+    ForBlock findForBlock(String template, int searchStartIndex, int endIndex) {
         int forDepth = 1;
         int eachDepth = 0;
         int ifDepth = 0;
@@ -1538,7 +1647,7 @@ public final class TemplateEngine {
         throw new TemplateSyntaxException("Missing closing |/for|.");
     }
 
-    private String renderForBlock(
+    String renderForBlock(
             String template,
             TemplateContext context,
             String source,
@@ -1676,7 +1785,7 @@ public final class TemplateEngine {
         return output.toString();
     }
 
-    private int toInt(Object val, String expr) {
+    int toInt(Object val, String expr) {
         if (val == null) {
             throw new TemplateRenderException("Expression '" + expr + "' evaluated to null");
         }
@@ -1690,7 +1799,7 @@ public final class TemplateEngine {
         }
     }
 
-    private String renderSwitchBlock(
+    String renderSwitchBlock(
             String template,
             TemplateContext context,
             String switchExpression,
@@ -1741,7 +1850,7 @@ public final class TemplateEngine {
         return output.toString();
     }
 
-    private String renderSwitchSection(
+    String renderSwitchSection(
             String template,
             TemplateContext context,
             int bodyStartIndex,
@@ -1756,7 +1865,7 @@ public final class TemplateEngine {
                 + renderRange(template, context, fallthroughEndIndex, bodyEndIndex);
     }
 
-    private List<Object> toList(Object value) {
+    List<Object> toList(Object value) {
         if (value == null) {
             return List.of();
         }
@@ -1786,7 +1895,7 @@ public final class TemplateEngine {
                 "Value is not iterable: " + value.getClass().getName());
     }
 
-    private IfBlock findIfBlock(String template, int searchStartIndex, int endIndex) {
+    IfBlock findIfBlock(String template, int searchStartIndex, int endIndex) {
         int ifDepth = 1;
         int eachDepth = 0;
         int switchDepth = 0;
@@ -1916,15 +2025,15 @@ public final class TemplateEngine {
         throw new TemplateSyntaxException("Missing closing |/if|.");
     }
 
-    private boolean isElseIfSource(String source) {
+    boolean isElseIfSource(String source) {
         return source.startsWith("else-if ");
     }
 
-    private String extractElseIfExpression(String source) {
+    String extractElseIfExpression(String source) {
         return source.substring("else-if ".length()).trim();
     }
 
-    private EachBlock findEachBlock(String template, int searchStartIndex, int endIndex) {
+    EachBlock findEachBlock(String template, int searchStartIndex, int endIndex) {
         int eachDepth = 1;
         int ifDepth = 0;
         int switchDepth = 0;
@@ -2000,7 +2109,7 @@ public final class TemplateEngine {
         throw new TemplateSyntaxException("Missing closing |/each|.");
     }
 
-    private SwitchBlock findSwitchBlock(String template, int searchStartIndex, int endIndex) {
+    SwitchBlock findSwitchBlock(String template, int searchStartIndex, int endIndex) {
         int switchDepth = 1;
         int ifDepth = 0;
         int eachDepth = 0;
@@ -2132,12 +2241,12 @@ public final class TemplateEngine {
         throw new TemplateSyntaxException("Missing closing |/switch|.");
     }
 
-    private boolean isCommentStart(String template, int openingPipeIndex) {
+    boolean isCommentStart(String template, int openingPipeIndex) {
         return openingPipeIndex + 1 < template.length()
                 && template.charAt(openingPipeIndex + 1) == '#';
     }
 
-    private int findCommentEndIndex(String template, int openingPipeIndex) {
+    int findCommentEndIndex(String template, int openingPipeIndex) {
         final var commentStartIndex = openingPipeIndex + 2;
         final var singleLineEndIndex = template.indexOf('|', commentStartIndex);
         final var blockEndIndex = template.indexOf("#|", commentStartIndex);
@@ -2155,7 +2264,7 @@ public final class TemplateEngine {
         return singleLineEndIndex + 1;
     }
 
-    private boolean isBlockComment(
+    boolean isBlockComment(
             String template,
             int commentStartIndex,
             int singleLineEndIndex,
@@ -2170,7 +2279,7 @@ public final class TemplateEngine {
                 && (singleLineEndIndex == -1 || firstLineBreakIndex < singleLineEndIndex);
     }
 
-    private int findFirstLineBreakIndex(String template, int startIndex) {
+    int findFirstLineBreakIndex(String template, int startIndex) {
         for (int index = startIndex; index < template.length(); index++) {
             final var current = template.charAt(index);
 
@@ -2182,7 +2291,7 @@ public final class TemplateEngine {
         return -1;
     }
 
-    private String renderValue(OutputMode mode, Object value) {
+    String renderValue(OutputMode mode, Object value) {
         return switch (mode) {
             case HTML_ESCAPED -> htmlEscaper.escape(value);
             case TRUSTED_HTML -> value == null ? "" : String.valueOf(value);
@@ -2193,7 +2302,7 @@ public final class TemplateEngine {
         };
     }
 
-    private String renderTemplateWithLayout(
+    String renderTemplateWithLayout(
             String template,
             TemplateContext context,
             LayoutDirective layoutDirective) {
@@ -2213,7 +2322,7 @@ public final class TemplateEngine {
         }
     }
 
-    private LayoutDirective findLayoutDirective(String template) {
+    LayoutDirective findLayoutDirective(String template) {
         int index = 0;
 
         while (index < template.length() && Character.isWhitespace(template.charAt(index))) {
@@ -2254,7 +2363,7 @@ public final class TemplateEngine {
                 closingPipeIndex + 1);
     }
 
-    private Map<String, String> collectSections(
+    Map<String, String> collectSections(
             String template,
             TemplateContext context,
             int startIndex,
@@ -2327,7 +2436,7 @@ public final class TemplateEngine {
         return Map.copyOf(sections);
     }
 
-    private void validateOnlyWhitespaceOutsideSections(
+    void validateOnlyWhitespaceOutsideSections(
             String template,
             int startIndex,
             int endIndex) {
@@ -2343,7 +2452,7 @@ public final class TemplateEngine {
         }
     }
 
-    private SectionBlock findSectionBlock(String template, int searchStartIndex, int endIndex) {
+    SectionBlock findSectionBlock(String template, int searchStartIndex, int endIndex) {
         int ifDepth = 0;
         int eachDepth = 0;
         int switchDepth = 0;
@@ -2403,7 +2512,7 @@ public final class TemplateEngine {
         throw new TemplateSyntaxException("Missing closing |/section|.");
     }
 
-    private String renderYield(String source) {
+    String renderYield(String source) {
         final var sectionName = source.substring("yield ".length()).trim();
 
         if (sectionName.isBlank()) {
@@ -2419,7 +2528,7 @@ public final class TemplateEngine {
         return stack.peekLast().getOrDefault(sectionName, "");
     }
 
-    private String renderComponent(
+    String renderComponent(
             String template,
             TemplateContext context,
             String source,
@@ -2447,7 +2556,7 @@ public final class TemplateEngine {
         }
     }
 
-    private String renderSlot(String source) {
+    String renderSlot(String source) {
         final var slotName = source.substring("slot ".length()).trim();
 
         if (slotName.isBlank()) {
@@ -2463,7 +2572,7 @@ public final class TemplateEngine {
         return stack.peekLast().getOrDefault(slotName, "");
     }
 
-    private Map<String, String> collectSlots(
+    Map<String, String> collectSlots(
             String template,
             TemplateContext context,
             int startIndex,
@@ -2536,7 +2645,7 @@ public final class TemplateEngine {
         return Map.copyOf(slots);
     }
 
-    private void validateOnlyWhitespaceOutsideSlots(
+    void validateOnlyWhitespaceOutsideSlots(
             String template,
             int startIndex,
             int endIndex) {
@@ -2552,7 +2661,7 @@ public final class TemplateEngine {
         }
     }
 
-    private ComponentBlock findComponentBlock(String template, int searchStartIndex, int endIndex) {
+    ComponentBlock findComponentBlock(String template, int searchStartIndex, int endIndex) {
         int componentDepth = 1;
         int index = searchStartIndex;
 
@@ -2597,7 +2706,7 @@ public final class TemplateEngine {
         throw new TemplateSyntaxException("Missing closing |/component|.");
     }
 
-    private SlotBlock findSlotBlock(String template, int searchStartIndex, int endIndex) {
+    SlotBlock findSlotBlock(String template, int searchStartIndex, int endIndex) {
         int ifDepth = 0;
         int eachDepth = 0;
         int switchDepth = 0;
@@ -2665,7 +2774,7 @@ public final class TemplateEngine {
         throw new TemplateSyntaxException("Missing closing |/slot|.");
     }
 
-    private ConditionalOutputExpression parseConditionalOutputExpression(String source) {
+    ConditionalOutputExpression parseConditionalOutputExpression(String source) {
         final var ifIndex = findOutputIfIndex(source);
 
         if (ifIndex == -1) {
@@ -2690,7 +2799,7 @@ public final class TemplateEngine {
                 conditionExpression);
     }
 
-    private int findOutputIfIndex(String source) {
+    int findOutputIfIndex(String source) {
         boolean insideSingleQuote = false;
         boolean insideDoubleQuote = false;
         int parenthesisDepth = 0;
@@ -2745,39 +2854,39 @@ public final class TemplateEngine {
         return -1;
     }
 
-    private record ConditionalOutputExpression(
+    record ConditionalOutputExpression(
             String outputSource,
             String conditionExpression) {
     }
 
-    private record ComponentBlock(
+    record ComponentBlock(
             int bodyStartIndex,
             int bodyEndIndex,
             int endStartIndex,
             int endEndIndex) {
     }
 
-    private record SlotBlock(
+    record SlotBlock(
             int bodyStartIndex,
             int bodyEndIndex,
             int endStartIndex,
             int endEndIndex) {
     }
 
-    private record LayoutDirective(
+    record LayoutDirective(
             String templateName,
             int startIndex,
             int endIndex) {
     }
 
-    private record SectionBlock(
+    record SectionBlock(
             int bodyStartIndex,
             int bodyEndIndex,
             int endStartIndex,
             int endEndIndex) {
     }
 
-    private record IfBlock(
+    record IfBlock(
             int ifBodyEndIndex,
             List<ElseIfBlock> elseIfBlocks,
             ElseBlock elseBlock,
@@ -2785,62 +2894,62 @@ public final class TemplateEngine {
             int endEndIndex) {
     }
 
-    private record ElseIfBlock(
+    record ElseIfBlock(
             String expression,
             int bodyStartIndex,
             int bodyEndIndex) {
     }
 
-    private record ElseBlock(
+    record ElseBlock(
             int bodyStartIndex,
             int bodyEndIndex) {
     }
 
-    private record EachBlock(
+    record EachBlock(
             int elseStartIndex,
             int elseEndIndex,
             int endStartIndex,
             int endEndIndex) {
-        private boolean hasElse() {
+        boolean hasElse() {
             return elseStartIndex != -1;
         }
     }
 
-    private record SwitchBlock(
+    record SwitchBlock(
             List<SwitchCaseBlock> cases,
             SwitchDefaultBlock defaultBlock,
             int endStartIndex,
             int endEndIndex) {
     }
 
-    private record SwitchCaseBlock(
+    record SwitchCaseBlock(
             String caseExpression,
             int bodyStartIndex,
             int bodyEndIndex,
             int fallthroughStartIndex,
             int fallthroughEndIndex) {
-        private boolean hasFallthrough() {
+        boolean hasFallthrough() {
             return fallthroughStartIndex != -1;
         }
     }
 
-    private record SwitchDefaultBlock(
+    record SwitchDefaultBlock(
             int bodyStartIndex,
             int bodyEndIndex,
             int fallthroughStartIndex,
             int fallthroughEndIndex) {
     }
 
-    private static final class SwitchSectionBuilder {
-        private final boolean defaultSection;
-        private final String caseExpression;
-        private final int bodyStartIndex;
+    static final class SwitchSectionBuilder {
+        final boolean defaultSection;
+        final String caseExpression;
+        final int bodyStartIndex;
 
-        private int bodyEndIndex = -1;
-        private int fallthroughStartIndex = -1;
-        private int fallthroughEndIndex = -1;
+        int bodyEndIndex = -1;
+        int fallthroughStartIndex = -1;
+        int fallthroughEndIndex = -1;
 
-        private SwitchSectionBuilder(
+        SwitchSectionBuilder(
                 boolean defaultSection,
                 String caseExpression,
                 int bodyStartIndex) {
@@ -2849,15 +2958,15 @@ public final class TemplateEngine {
             this.bodyStartIndex = bodyStartIndex;
         }
 
-        private static SwitchSectionBuilder caseSection(String caseExpression, int bodyStartIndex) {
+        static SwitchSectionBuilder caseSection(String caseExpression, int bodyStartIndex) {
             return new SwitchSectionBuilder(false, caseExpression, bodyStartIndex);
         }
 
-        private static SwitchSectionBuilder defaultSection(int bodyStartIndex) {
+        static SwitchSectionBuilder defaultSection(int bodyStartIndex) {
             return new SwitchSectionBuilder(true, null, bodyStartIndex);
         }
 
-        private SwitchCaseBlock toCaseBlock() {
+        SwitchCaseBlock toCaseBlock() {
             return new SwitchCaseBlock(
                     caseExpression,
                     bodyStartIndex,
@@ -2866,7 +2975,7 @@ public final class TemplateEngine {
                     fallthroughEndIndex);
         }
 
-        private SwitchDefaultBlock toDefaultBlock() {
+        SwitchDefaultBlock toDefaultBlock() {
             return new SwitchDefaultBlock(
                     bodyStartIndex,
                     bodyEndIndex,
@@ -2876,7 +2985,7 @@ public final class TemplateEngine {
 
     }
 
-    private boolean isConditionalAttributeLiteral(String expression) {
+    boolean isConditionalAttributeLiteral(String expression) {
         final var attributeName = expression.trim();
 
         if (attributeName.isBlank()) {
@@ -2891,7 +3000,7 @@ public final class TemplateEngine {
                 attributeName.toLowerCase(Locale.ROOT));
     }
 
-    private String renderConditionalAttributeOutput(
+    String renderConditionalAttributeOutput(
             String expression,
             TemplateContext context) {
         final var trimmedExpression = expression.trim();
@@ -2922,7 +3031,7 @@ public final class TemplateEngine {
         return attributeName + "=\"" + attributeEscaper.escape(value) + "\"";
     }
 
-    private int findTopLevelEqualsIndex(String expression) {
+    int findTopLevelEqualsIndex(String expression) {
         boolean insideSingleQuote = false;
         boolean insideDoubleQuote = false;
         int parenthesisDepth = 0;
@@ -2962,18 +3071,18 @@ public final class TemplateEngine {
         return -1;
     }
 
-    private boolean isValidAttributeName(String attributeName) {
+    boolean isValidAttributeName(String attributeName) {
         return attributeName.matches("[A-Za-z_:][A-Za-z0-9_:.\\-]*");
     }
 
-    private void removeTrailingAttributeWhitespace(StringBuilder output) {
+    void removeTrailingAttributeWhitespace(StringBuilder output) {
         while (!output.isEmpty()
                 && Character.isWhitespace(output.charAt(output.length() - 1))) {
             output.deleteCharAt(output.length() - 1);
         }
     }
 
-    private int skipWhitespaceBeforeTagClose(String template, int index) {
+    int skipWhitespaceBeforeTagClose(String template, int index) {
         var currentIndex = index;
 
         while (currentIndex < template.length()
@@ -2995,14 +3104,14 @@ public final class TemplateEngine {
         return index;
     }
 
-    private record MinifyBlock(
+    record MinifyBlock(
             int bodyStartIndex,
             int bodyEndIndex,
             int endStartIndex,
             int endEndIndex) {
     }
 
-    private MinifyBlock findMinifyBlock(String template, int searchStartIndex, int endIndex) {
+    MinifyBlock findMinifyBlock(String template, int searchStartIndex, int endIndex) {
         int depth = 1;
         int index = searchStartIndex;
         while (index < endIndex) {
@@ -3037,7 +3146,7 @@ public final class TemplateEngine {
         throw new TemplateSyntaxException("Missing closing |/minify|.");
     }
 
-    private record AttemptBlock(
+    record AttemptBlock(
             int attemptBodyEndIndex,
             int recoverBodyStartIndex,
             int recoverBodyEndIndex,
@@ -3049,7 +3158,7 @@ public final class TemplateEngine {
         }
     }
 
-    private AttemptBlock findAttemptBlock(String template, int searchStartIndex, int endIndex) {
+    AttemptBlock findAttemptBlock(String template, int searchStartIndex, int endIndex) {
         int depth = 1;
         int index = searchStartIndex;
 
@@ -3107,14 +3216,14 @@ public final class TemplateEngine {
         throw new TemplateSyntaxException("Missing closing |/attempt|.");
     }
 
-    private record MacroBlock(
+    record MacroBlock(
             int bodyStartIndex,
             int bodyEndIndex,
             int endStartIndex,
             int endEndIndex) {
     }
 
-    private MacroBlock findMacroBlock(String template, int searchStartIndex, int endIndex) {
+    MacroBlock findMacroBlock(String template, int searchStartIndex, int endIndex) {
         int depth = 1;
         int index = searchStartIndex;
         while (index < endIndex) {
@@ -3149,14 +3258,14 @@ public final class TemplateEngine {
         throw new TemplateSyntaxException("Missing closing |/macro|.");
     }
 
-    private record SeparatorBlock(
+    record SeparatorBlock(
             int bodyStartIndex,
             int bodyEndIndex,
             int endStartIndex,
             int endEndIndex) {
     }
 
-    private SeparatorBlock findSeparatorBlock(String template, int searchStartIndex, int endIndex) {
+    SeparatorBlock findSeparatorBlock(String template, int searchStartIndex, int endIndex) {
         int depth = 1;
         int index = searchStartIndex;
         while (index < endIndex) {
@@ -3191,7 +3300,7 @@ public final class TemplateEngine {
         throw new TemplateSyntaxException("Missing closing |/separator|.");
     }
 
-    private boolean isLastEachItem(TemplateContext context) {
+    boolean isLastEachItem(TemplateContext context) {
         Object eachVal = context.get("each");
         if (eachVal instanceof io.lemadane.piped.template.engine.metadata.EachMetadata meta) {
             return meta.last();
@@ -3205,14 +3314,14 @@ public final class TemplateEngine {
         return false;
     }
 
-    private record FragmentBlock(
+    record FragmentBlock(
             int bodyStartIndex,
             int bodyEndIndex,
             int endStartIndex,
             int endEndIndex) {
     }
 
-    private FragmentBlock findFragmentBlock(String template, int searchStartIndex, int endIndex) {
+    FragmentBlock findFragmentBlock(String template, int searchStartIndex, int endIndex) {
         int depth = 1;
         int index = searchStartIndex;
         while (index < endIndex) {
@@ -3247,7 +3356,7 @@ public final class TemplateEngine {
         throw new TemplateSyntaxException("Missing closing |/fragment|.");
     }
 
-    private String getFirstPWAAttr(java.util.Map<String, String> attrs, String... keys) {
+    String getFirstPWAAttr(java.util.Map<String, String> attrs, String... keys) {
         for (String key : keys) {
             String val = attrs.get(key);
             if (val != null && !val.isEmpty()) {
@@ -3257,7 +3366,7 @@ public final class TemplateEngine {
         return null;
     }
 
-    private java.util.Map<String, String> parseKeyValuePairs(String input) {
+    java.util.Map<String, String> parseKeyValuePairs(String input) {
         java.util.Map<String, String> result = new java.util.HashMap<>();
         int i = 0;
         while (i < input.length()) {

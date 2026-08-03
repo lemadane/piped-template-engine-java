@@ -5,7 +5,7 @@ import java.io.IOException;
 import java.io.Writer;
 
 public final class TextNode implements ASTNode {
-    private final char[] textChars;
+    final char[] textChars;
 
     public TextNode(String text) {
         this.textChars = text.toCharArray();

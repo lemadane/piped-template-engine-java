@@ -7,9 +7,9 @@ import java.util.ArrayList;
 import java.util.List;
 
 public final class AlpineNode implements ASTNode {
-    private final String src;
-    private final List<String> plugins;
-    private final boolean cloak;
+    final String src;
+    final List<String> plugins;
+    final boolean cloak;
 
     public AlpineNode(String src, List<String> plugins, boolean cloak) {
         this.src = src;
@@ -43,7 +43,7 @@ public final class AlpineNode implements ASTNode {
         writer.write(String.join("\n", tags));
     }
 
-    private String escapeHtml(String s) {
+    String escapeHtml(String s) {
         if (s == null) return "";
         return s.replace("&", "&amp;")
                 .replace("<", "&lt;")

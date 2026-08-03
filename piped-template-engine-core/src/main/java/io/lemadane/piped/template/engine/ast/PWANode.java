@@ -7,12 +7,12 @@ import java.util.ArrayList;
 import java.util.List;
 
 public final class PWANode implements ASTNode {
-    private final String name;
-    private final String manifest;
-    private final String theme;
-    private final String icon;
-    private final String sw;
-    private final String statusColor;
+    final String name;
+    final String manifest;
+    final String theme;
+    final String icon;
+    final String sw;
+    final String statusColor;
 
     public PWANode(String name, String manifest, String theme, String icon, String sw, String statusColor) {
         this.name = name;
@@ -63,7 +63,7 @@ public final class PWANode implements ASTNode {
         writer.write(String.join("\n", tags));
     }
 
-    private String escapeHtml(String s) {
+    String escapeHtml(String s) {
         if (s == null) return "";
         return s.replace("&", "&amp;")
                 .replace("<", "&lt;")

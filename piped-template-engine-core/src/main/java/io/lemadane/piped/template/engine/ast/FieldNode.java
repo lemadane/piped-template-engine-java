@@ -7,8 +7,8 @@ import java.io.Writer;
 import java.util.Map;
 
 public final class FieldNode implements ASTNode {
-    private final String propertyPath;
-    private final ExpressionEvaluator evaluator;
+    final String propertyPath;
+    final ExpressionEvaluator evaluator;
 
     public FieldNode(String propertyPath, ExpressionEvaluator evaluator) {
         this.propertyPath = propertyPath;
@@ -38,7 +38,7 @@ public final class FieldNode implements ASTNode {
         writer.write(output.toString());
     }
 
-    private String deriveName(String path) {
+    String deriveName(String path) {
         int lastDot = path.lastIndexOf('.');
         return lastDot == -1 ? path : path.substring(lastDot + 1);
     }

@@ -9,11 +9,11 @@ import java.util.List;
 public final class IfNode implements ASTNode {
     public record ElseIfBranch(String condition, ASTNode block) {}
 
-    private final String ifCondition;
-    private final ASTNode thenBlock;
-    private final List<ElseIfBranch> elseIfBranches;
-    private final ASTNode elseBlock;
-    private final ExpressionEvaluator evaluator;
+    final String ifCondition;
+    final ASTNode thenBlock;
+    final List<ElseIfBranch> elseIfBranches;
+    final ASTNode elseBlock;
+    final ExpressionEvaluator evaluator;
 
     public IfNode(
             String ifCondition,
@@ -23,7 +23,7 @@ public final class IfNode implements ASTNode {
             ExpressionEvaluator evaluator) {
         this.ifCondition = ifCondition;
         this.thenBlock = thenBlock;
-        this.elseIfBranches = List.copyOf(elseIfBranches);
+        this.elseIfBranches = elseIfBranches != null ? List.copyOf(elseIfBranches) : List.of();
         this.elseBlock = elseBlock;
         this.evaluator = evaluator;
     }

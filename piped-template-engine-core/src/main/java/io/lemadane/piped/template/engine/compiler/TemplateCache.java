@@ -5,7 +5,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 
 public final class TemplateCache {
-    private final Map<String, CompiledTemplate> cache = new ConcurrentHashMap<>();
+    final Map<String, CompiledTemplate> cache = new ConcurrentHashMap<>();
 
     public CompiledTemplate get(String key) {
         return cache.get(key);

@@ -12,7 +12,7 @@ import org.junit.jupiter.api.Test;
 import io.lemadane.piped.template.engine.exceptions.TemplateSyntaxException;
 
 class EachTest {
-   private final TemplateEngine engine = new TemplateEngine();
+   final TemplateEngine engine = new TemplateEngine();
 
    @Nested
    @DisplayName("List loops")
@@ -373,7 +373,7 @@ class EachTest {
       }
    }
 
-   private static String compact(String value) {
+   static String compact(String value) {
       return value
             .replaceAll("\\s+", " ")
             .trim();

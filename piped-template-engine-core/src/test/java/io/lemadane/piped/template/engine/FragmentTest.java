@@ -7,7 +7,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.*;
 
 class FragmentTest {
-    private final TemplateEngine engine = new TemplateEngine();
+    final TemplateEngine engine = new TemplateEngine();
 
     @Test
     @DisplayName("Renders template containing fragments normally")

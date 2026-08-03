@@ -6,7 +6,7 @@ import java.io.Writer;
 import java.util.List;
 
 public final class BlockNode implements ASTNode {
-    private final List<ASTNode> children;
+    final List<ASTNode> children;
 
     public BlockNode(List<ASTNode> children) {
         this.children = List.copyOf(children);

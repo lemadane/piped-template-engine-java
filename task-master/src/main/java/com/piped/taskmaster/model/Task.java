@@ -1,9 +1,9 @@
 package com.piped.taskmaster.model;
 
 public class Task {
-    private String id;
-    private String title;
-    private boolean completed;
+    String id;
+    String title;
+    boolean completed;
 
     public Task() {}
 

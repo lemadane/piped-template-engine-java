@@ -7,7 +7,7 @@ import java.io.Writer;
 import java.io.StringWriter;
 
 public final class MinifyNode implements ASTNode {
-    private final ASTNode body;
+    final ASTNode body;
 
     public MinifyNode(ASTNode body) {
         this.body = body;

@@ -7,7 +7,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.*;
 
 class FormattingTest {
-    private final TemplateEngine engine = new TemplateEngine();
+    final TemplateEngine engine = new TemplateEngine();
 
     @Test
     @DisplayName("Minifies inline blocks with |minify|")

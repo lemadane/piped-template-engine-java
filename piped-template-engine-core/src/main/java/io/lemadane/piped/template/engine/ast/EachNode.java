@@ -12,12 +12,12 @@ import java.util.List;
 import java.util.Map;
 
 public final class EachNode implements ASTNode {
-    private final String itemName;
-    private final String collectionExpression;
-    private final ASTNode bodyBlock;
-    private final ASTNode elseBlock;
-    private final ASTNode separatorNode;
-    private final ExpressionEvaluator evaluator;
+    final String itemName;
+    final String collectionExpression;
+    final ASTNode bodyBlock;
+    final ASTNode elseBlock;
+    final ASTNode separatorNode;
+    final ExpressionEvaluator evaluator;
 
     public EachNode(
             String itemName,
@@ -43,6 +43,14 @@ public final class EachNode implements ASTNode {
         this(itemName, collectionExpression, bodyBlock, elseBlock, null, evaluator);
     }
 
+    public String getItemName() {
+        return itemName;
+    }
+
+    public String getCollectionExpression() {
+        return collectionExpression;
+    }
+
     public ASTNode getSeparatorNode() {
         return separatorNode;
     }
@@ -51,11 +59,64 @@ public final class EachNode implements ASTNode {
         return bodyBlock;
     }
 
+    public ASTNode getElseBlock() {
+        return elseBlock;
+    }
+
     @Override
     public void render(TemplateContext context, Writer writer) throws IOException {
         Object rawValue = evaluator.evaluate(collectionExpression, context);
-        Iterable<?> items = toIterable(rawValue);
+        if (rawValue instanceof Map<?, ?> mapVal) {
+            List<Map.Entry<?, ?>> entryList = new ArrayList<>(mapVal.entrySet());
+            int total = entryList.size();
+            if (total > 0) {
+                String keyVar = itemName;
+                String valVar = null;
+                if (itemName.contains(",")) {
+                    String[] parts = itemName.split(",", 2);
+                    keyVar = parts[0].trim();
+                    valVar = parts[1].trim();
+                }
+                for (int i = 0; i < total; i++) {
+                    Map.Entry<?, ?> entry = entryList.get(i);
+                    boolean isLast = (i == total - 1);
+                    Map<String, Object> loopMeta = Map.of(
+                        "index", i + 1,
+                        "index0", i,
+                        "count", i + 1,
+                        "first", i == 0,
+                        "last", isLast,
+                        "even", (i % 2 == 1),
+                        "odd", (i % 2 == 0),
+                        "total", total
+                    );
+                    Map<String, Object> scope = new HashMap<>();
+                    if (valVar != null) {
+                        scope.put(keyVar, entry.getKey() == null ? "" : entry.getKey());
+                        scope.put(valVar, entry.getValue() == null ? "" : entry.getValue());
+                    } else {
+                        scope.put(keyVar, entry);
+                    }
+                    scope.put("each", loopMeta);
+                    TemplateContext subContext = context.subContext(scope);
+                    try {
+                        bodyBlock.render(subContext, writer);
+                        if (separatorNode != null && !isLast) {
+                            separatorNode.render(subContext, writer);
+                        }
+                    } catch (io.lemadane.piped.template.engine.exceptions.LoopContinueException e) {
+                    } catch (io.lemadane.piped.template.engine.exceptions.LoopBreakException e) {
+                        break;
+                    }
+                }
+                return;
+            } else if (elseBlock != null) {
+                elseBlock.render(context, writer);
+                return;
+            }
+        }
 
+        Iterable<?> items = toIterable(rawValue);
         if (items != null && items.iterator().hasNext()) {
             List<Object> itemList = new ArrayList<>();
             items.forEach(itemList::add);
@@ -65,26 +126,40 @@ public final class EachNode implements ASTNode {
                 Object item = itemList.get(i);
                 boolean isLast = (i == total - 1);
                 Map<String, Object> loopMeta = Map.of(
-                    "index", i,
+                    "index", i + 1,
+                    "index0", i,
                     "count", i + 1,
                     "first", i == 0,
                     "last", isLast,
+                    "even", (i % 2 == 1),
+                    "odd", (i % 2 == 0),
                     "total", total
                 );
 
                 Map<String, Object> scope = new HashMap<>();
-                scope.put(itemName, item == null ? "" : item);
+                if (itemName.contains(",")) {
+                    String[] parts = itemName.split(",", 2);
+                    String keyVar = parts[0].trim();
+                    String valVar = parts[1].trim();
+                    if (item instanceof Map.Entry<?, ?> entry) {
+                        scope.put(keyVar, entry.getKey() == null ? "" : entry.getKey());
+                        scope.put(valVar, entry.getValue() == null ? "" : entry.getValue());
+                    } else {
+                        scope.put(keyVar, item == null ? "" : item);
+                        scope.put(valVar, item == null ? "" : item);
+                    }
+                } else {
+                    scope.put(itemName, item == null ? "" : item);
+                }
                 scope.put("each", loopMeta);
 
                 TemplateContext subContext = context.subContext(scope);
                 try {
                     bodyBlock.render(subContext, writer);
-
                     if (separatorNode != null && !isLast) {
                         separatorNode.render(subContext, writer);
                     }
                 } catch (io.lemadane.piped.template.engine.exceptions.LoopContinueException e) {
-                    // Continue next iteration
                 } catch (io.lemadane.piped.template.engine.exceptions.LoopBreakException e) {
                     break;
                 }
@@ -94,7 +169,7 @@ public final class EachNode implements ASTNode {
         }
     }
 
-    private Iterable<?> toIterable(Object value) {
+    Iterable<?> toIterable(Object value) {
         if (value == null) {
             return null;
         }

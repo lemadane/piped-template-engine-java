@@ -17,7 +17,7 @@ import io.lemadane.piped.template.engine.exceptions.TemplateRenderException;
 import io.lemadane.piped.template.engine.exceptions.TemplateSyntaxException;
 
 class TemplateEngineOutputTest {
-   private final TemplateEngine engine = new TemplateEngine(
+   final TemplateEngine engine = new TemplateEngine(
          Path.of("src/main/resources/pte"));
 
    @Nested
@@ -441,7 +441,7 @@ class TemplateEngineOutputTest {
       }
    }
 
-   private static String compact(String value) {
+   static String compact(String value) {
       return value
             .replaceAll("\\s+", " ")
             .trim();

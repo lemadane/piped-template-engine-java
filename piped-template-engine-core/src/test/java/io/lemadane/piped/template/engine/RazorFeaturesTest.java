@@ -7,7 +7,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.*;
 
 class RazorFeaturesTest {
-    private final TemplateEngine engine = new TemplateEngine();
+    final TemplateEngine engine = new TemplateEngine();
 
     @Test
     @DisplayName("Parses model directive contract without output")

@@ -12,7 +12,7 @@ import java.util.Map;
 
 public class PipedTemplateView extends AbstractTemplateView {
 
-    private TemplateEngine templateEngine;
+    TemplateEngine templateEngine;
 
     public void setTemplateEngine(TemplateEngine templateEngine) {
         this.templateEngine = templateEngine;

@@ -10,9 +10,10 @@ import java.util.List;
 import java.util.Map;
 
 public final class CallMacroNode implements ASTNode {
-    private final String macroName;
-    private final List<String> argumentExpressions;
-    private final ExpressionEvaluator evaluator;
+    static final int MAX_RECURSION_DEPTH = 100;
+    final String macroName;
+    final List<String> argumentExpressions;
+    final ExpressionEvaluator evaluator;
 
     public CallMacroNode(String macroName, List<String> argumentExpressions, ExpressionEvaluator evaluator) {
         this.macroName = macroName;
@@ -35,6 +36,14 @@ public final class CallMacroNode implements ASTNode {
             throw new TemplateRenderException("Undefined macro '" + macroName + "'.");
         }
 
+        // Recursion tracking
+        String depthKey = "_macro_depth_" + macroName;
+        Object depthObj = context.get(depthKey);
+        int currentDepth = depthObj instanceof Integer d ? d : 0;
+        if (currentDepth >= MAX_RECURSION_DEPTH) {
+            throw new TemplateRenderException("Maximum recursion depth exceeded for macro '" + macroName + "'.");
+        }
+
         Map<String, Object> macroScope = new HashMap<>();
         List<String> params = macroNode.getParameters();
 
@@ -47,6 +56,7 @@ public final class CallMacroNode implements ASTNode {
             macroScope.put(paramName, argVal == null ? "" : argVal);
         }
 
+        macroScope.put(depthKey, currentDepth + 1);
         TemplateContext subContext = context.subContext(macroScope);
         macroNode.getBody().render(subContext, writer);
     }

@@ -6,7 +6,7 @@ import io.lemadane.piped.template.engine.exceptions.TemplateSyntaxException;
 import io.lemadane.piped.template.engine.statements.EachStatement;
 
 public final class EachStatementParser {
-   private static final Pattern VARIABLE_NAME = Pattern.compile("[a-zA-Z_][a-zA-Z0-9_]*");
+   static final Pattern VARIABLE_NAME = Pattern.compile("[a-zA-Z_][a-zA-Z0-9_]*");
 
    public EachStatement parse(String source) {
       if (source == null || source.isBlank()) {
@@ -67,11 +67,11 @@ public final class EachStatementParser {
             false);
    }
 
-   private int findInIndex(String body) {
+   int findInIndex(String body) {
       return body.indexOf(" in ");
    }
 
-   private void validateVariableName(String name) {
+   void validateVariableName(String name) {
       if (!VARIABLE_NAME.matcher(name).matches()) {
          throw new TemplateSyntaxException(
                "Invalid variable name: " + name);

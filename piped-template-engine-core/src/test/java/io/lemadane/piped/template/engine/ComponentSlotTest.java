@@ -586,7 +586,7 @@ class ComponentSlotTest {
       }
    }
 
-   private static String compact(String value) {
+   static String compact(String value) {
       return value
             .replaceAll("\\s+", " ")
             .trim();

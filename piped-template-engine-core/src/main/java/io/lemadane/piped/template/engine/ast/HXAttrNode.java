@@ -7,12 +7,12 @@ import java.util.ArrayList;
 import java.util.List;
 
 public final class HXAttrNode implements ASTNode {
-    private final String method;
-    private final String url;
-    private final String target;
-    private final String swap;
-    private final String indicator;
-    private final String trigger;
+    final String method;
+    final String url;
+    final String target;
+    final String swap;
+    final String indicator;
+    final String trigger;
 
     public HXAttrNode(String method, String url, String target, String swap, String indicator, String trigger) {
         this.method = method;
@@ -52,7 +52,7 @@ public final class HXAttrNode implements ASTNode {
         writer.write(String.join(" ", attrs));
     }
 
-    private String escapeHtml(String s) {
+    String escapeHtml(String s) {
         if (s == null) return "";
         return s.replace("&", "&amp;")
                 .replace("<", "&lt;")

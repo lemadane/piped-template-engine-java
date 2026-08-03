@@ -5,10 +5,10 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @ConfigurationProperties(prefix = "spring.pipedtemplate")
 public class PipedTemplateProperties {
 
-    private String prefix = "src/main/resources/pte-templates";
-    private String suffix = ".pte";
-    private String contentType = "text/html;charset=UTF-8";
-    private int order = 20;
+    String prefix = "classpath:/pte-templates/";
+    String suffix = ".pte";
+    String contentType = "text/html;charset=UTF-8";
+    int order = 20;
 
     public String getPrefix() {
         return prefix;

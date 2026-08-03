@@ -5,8 +5,8 @@ import java.io.IOException;
 import java.io.Writer;
 
 public final class AlpineAttrNode implements ASTNode {
-    private final String directive;
-    private final String value;
+    final String directive;
+    final String value;
 
     public AlpineAttrNode(String directive, String value) {
         this.directive = directive;
@@ -30,7 +30,7 @@ public final class AlpineAttrNode implements ASTNode {
         }
     }
 
-    private String escapeHtml(String s) {
+    String escapeHtml(String s) {
         if (s == null) return "";
         return s.replace("&", "&amp;")
                 .replace("<", "&lt;")

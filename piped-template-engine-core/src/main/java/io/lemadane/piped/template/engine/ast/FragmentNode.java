@@ -5,8 +5,8 @@ import java.io.IOException;
 import java.io.Writer;
 
 public final class FragmentNode implements ASTNode {
-    private final String name;
-    private final ASTNode body;
+    final String name;
+    final ASTNode body;
 
     public FragmentNode(String name, ASTNode body) {
         this.name = name;
@@ -33,7 +33,7 @@ public final class FragmentNode implements ASTNode {
         return searchFragment(body, targetName);
     }
 
-    private FragmentNode searchFragment(ASTNode node, String targetName) {
+    FragmentNode searchFragment(ASTNode node, String targetName) {
         if (node == null) {
             return null;
         }

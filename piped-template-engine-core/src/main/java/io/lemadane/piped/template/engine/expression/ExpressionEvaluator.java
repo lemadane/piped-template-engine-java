@@ -21,7 +21,7 @@ import java.util.Objects;
 import java.util.Optional;
 
 public final class ExpressionEvaluator {
-      private final PropertyReader propertyReader;
+      final PropertyReader propertyReader;
 
       public ExpressionEvaluator() {
             this.propertyReader = new PropertyReader();
@@ -56,7 +56,7 @@ public final class ExpressionEvaluator {
             return Objects.equals(left, right);
       }
 
-      private Object evaluateCondition(String expression, TemplateContext context) {
+      Object evaluateCondition(String expression, TemplateContext context) {
             final var trimmedExpression = expression.trim();
 
             final var norIndex = findWordOperator(trimmedExpression, "nor");
@@ -113,7 +113,7 @@ public final class ExpressionEvaluator {
             return evaluateValue(trimmedExpression, context);
       }
 
-      private Object evaluateValue(String expression, TemplateContext context) {
+      Object evaluateValue(String expression, TemplateContext context) {
             final var trimmedExpression = removeWrappingParentheses(expression.trim());
 
             if (trimmedExpression.isEmpty()) {
@@ -217,7 +217,7 @@ public final class ExpressionEvaluator {
             return propertyReader.readPath(trimmedExpression, context);
       }
 
-      private boolean compare(Object left, Object right, String operator) {
+      boolean compare(Object left, Object right, String operator) {
             return switch (operator) {
                   case "==" -> valuesEqual(left, right);
                   case "!=" -> !valuesEqual(left, right);
@@ -229,7 +229,7 @@ public final class ExpressionEvaluator {
             };
       }
 
-      private int compareOrdered(Object left, Object right) {
+      int compareOrdered(Object left, Object right) {
             if (left == null || right == null) {
                   throw new IllegalArgumentException("Cannot compare null values.");
             }
@@ -244,7 +244,7 @@ public final class ExpressionEvaluator {
             return String.valueOf(left).compareTo(String.valueOf(right));
       }
 
-      private boolean toBoolean(Object value) {
+      boolean toBoolean(Object value) {
             if (value == null) {
                   return false;
             }
@@ -281,22 +281,22 @@ public final class ExpressionEvaluator {
             return true;
       }
 
-      private boolean isQuotedString(String value) {
+      boolean isQuotedString(String value) {
             return value.length() >= 2
                         && (value.startsWith("\"") && value.endsWith("\"")
                                     || value.startsWith("'") && value.endsWith("'"));
       }
 
-      private boolean isNumber(String value) {
+      boolean isNumber(String value) {
             return value.matches("-?\\d+(\\.\\d+)?");
       }
 
-      private boolean startsWithWord(String expression, String word) {
+      boolean startsWithWord(String expression, String word) {
             return expression.equals(word)
                         || expression.startsWith(word + " ");
       }
 
-      private TernaryExpression findTernaryExpression(String expression) {
+      TernaryExpression findTernaryExpression(String expression) {
             boolean insideSingleQuote = false;
             boolean insideDoubleQuote = false;
             int parenthesisDepth = 0;
@@ -373,7 +373,7 @@ public final class ExpressionEvaluator {
                         falseExpression);
       }
 
-      private int findTernaryColon(String expression, int startIndex) {
+      int findTernaryColon(String expression, int startIndex) {
             boolean insideSingleQuote = false;
             boolean insideDoubleQuote = false;
             int parenthesisDepth = 0;
@@ -435,12 +435,12 @@ public final class ExpressionEvaluator {
             return -1;
       }
 
-      private boolean isOptionalChainingQuestionMark(String expression, int index) {
+      boolean isOptionalChainingQuestionMark(String expression, int index) {
             return index + 1 < expression.length()
                         && expression.charAt(index + 1) == '.';
       }
 
-      private boolean isNullCoalescingQuestionMark(String expression, int index) {
+      boolean isNullCoalescingQuestionMark(String expression, int index) {
             final var previousIsQuestionMark = index > 0
                         && expression.charAt(index - 1) == '?';
 
@@ -450,7 +450,7 @@ public final class ExpressionEvaluator {
             return previousIsQuestionMark || nextIsQuestionMark;
       }
 
-      private int findNullCoalescingOperator(String expression) {
+      int findNullCoalescingOperator(String expression) {
             boolean insideSingleQuote = false;
             boolean insideDoubleQuote = false;
             int parenthesisDepth = 0;
@@ -490,7 +490,7 @@ public final class ExpressionEvaluator {
             return -1;
       }
 
-      private int findWordOperator(String expression, String operator) {
+      int findWordOperator(String expression, String operator) {
             boolean insideSingleQuote = false;
             boolean insideDoubleQuote = false;
             int parenthesisDepth = 0;
@@ -545,7 +545,7 @@ public final class ExpressionEvaluator {
             return -1;
       }
 
-      private Comparison findComparison(String expression) {
+      Comparison findComparison(String expression) {
             final var operators = new String[] { "==", "!=", ">=", "<=", ">", "<" };
 
             boolean insideSingleQuote = false;
@@ -596,7 +596,7 @@ public final class ExpressionEvaluator {
             return null;
       }
 
-      private String removeWrappingParentheses(String expression) {
+      String removeWrappingParentheses(String expression) {
             var result = expression;
 
             while (result.startsWith("(") && result.endsWith(")") && wrapsWholeExpression(result)) {
@@ -606,7 +606,7 @@ public final class ExpressionEvaluator {
             return result;
       }
 
-      private boolean wrapsWholeExpression(String expression) {
+      boolean wrapsWholeExpression(String expression) {
             int depth = 0;
             boolean insideSingleQuote = false;
             boolean insideDoubleQuote = false;
@@ -644,7 +644,7 @@ public final class ExpressionEvaluator {
             return depth == 0;
       }
 
-      private FilteredExpression parseFilteredExpression(String expression) {
+      FilteredExpression parseFilteredExpression(String expression) {
             final var parts = splitByTopLevelComma(expression);
 
             if (parts.size() == 1) {
@@ -745,7 +745,7 @@ public final class ExpressionEvaluator {
             return parts;
       }
 
-      private Object evaluateFilteredExpression(FilteredExpression filteredExpression, TemplateContext context) {
+      Object evaluateFilteredExpression(FilteredExpression filteredExpression, TemplateContext context) {
             Object value = evaluateValue(filteredExpression.valueExpression(), context);
 
             for (final var filterSource : filteredExpression.filters()) {
@@ -755,7 +755,7 @@ public final class ExpressionEvaluator {
             return value;
       }
 
-      private Object applyFilter(Object value, String filterSource, TemplateContext context) {
+      Object applyFilter(Object value, String filterSource, TemplateContext context) {
             final var filterCall = parseFilterCall(filterSource);
 
             return switch (filterCall.name()) {
@@ -775,7 +775,7 @@ public final class ExpressionEvaluator {
             };
       }
 
-      private FilterCall parseFilterCall(String filterSource) {
+      FilterCall parseFilterCall(String filterSource) {
             final var trimmedFilterSource = filterSource.trim();
 
             if (trimmedFilterSource.isBlank()) {
@@ -795,7 +795,7 @@ public final class ExpressionEvaluator {
                         "");
       }
 
-      private String stringValue(Object value) {
+      String stringValue(Object value) {
             if (value == null) {
                   return "";
             }
@@ -803,7 +803,7 @@ public final class ExpressionEvaluator {
             return String.valueOf(value);
       }
 
-      private String capitalizeText(String value) {
+      String capitalizeText(String value) {
             if (value.isEmpty()) {
                   return value;
             }
@@ -815,7 +815,7 @@ public final class ExpressionEvaluator {
             return value.substring(0, 1).toUpperCase(Locale.ROOT) + value.substring(1);
       }
 
-      private String slugify(String value) {
+      String slugify(String value) {
             if (value == null || value.isBlank()) {
                   return "";
             }
@@ -828,7 +828,7 @@ public final class ExpressionEvaluator {
                         .replaceAll("-+", "-");
       }
 
-      private int lengthOf(Object value) {
+      int lengthOf(Object value) {
             if (value == null) {
                   return 0;
             }
@@ -852,7 +852,7 @@ public final class ExpressionEvaluator {
             return String.valueOf(value).length();
       }
 
-      private Object defaultValue(
+      Object defaultValue(
                   Object value,
                   String argumentExpression,
                   TemplateContext context) {
@@ -867,7 +867,7 @@ public final class ExpressionEvaluator {
             return evaluateValue(argumentExpression, context);
       }
 
-      private String currencyValue(
+      String currencyValue(
                   Object value,
                   String argumentExpression,
                   TemplateContext context) {
@@ -884,7 +884,7 @@ public final class ExpressionEvaluator {
             return symbol + formatter.format(toBigDecimal(value));
       }
 
-      private String numberValue(
+      String numberValue(
                   Object value,
                   String argumentExpression,
                   TemplateContext context) {
@@ -901,7 +901,7 @@ public final class ExpressionEvaluator {
             return formatter.format(toBigDecimal(value));
       }
 
-      private BigDecimal toBigDecimal(Object value) {
+      BigDecimal toBigDecimal(Object value) {
             if (value instanceof Number numberValue) {
                   return new BigDecimal(String.valueOf(numberValue));
             }
@@ -913,7 +913,7 @@ public final class ExpressionEvaluator {
             throw new IllegalArgumentException("Value is not numeric: " + value);
       }
 
-      private String dateValue(
+      String dateValue(
                   Object value,
                   String argumentExpression,
                   TemplateContext context) {
@@ -924,7 +924,7 @@ public final class ExpressionEvaluator {
                         "yyyy-MM-dd");
       }
 
-      private String timeValue(
+      String timeValue(
                   Object value,
                   String argumentExpression,
                   TemplateContext context) {
@@ -935,7 +935,7 @@ public final class ExpressionEvaluator {
                         "HH:mm:ss");
       }
 
-      private String dateTimeValue(
+      String dateTimeValue(
                   Object value,
                   String argumentExpression,
                   TemplateContext context) {
@@ -946,7 +946,7 @@ public final class ExpressionEvaluator {
                         "yyyy-MM-dd HH:mm:ss");
       }
 
-      private String formatTemporalValue(
+      String formatTemporalValue(
                   Object value,
                   String argumentExpression,
                   TemplateContext context,
@@ -985,7 +985,7 @@ public final class ExpressionEvaluator {
                         "Value is not a date/time value: " + value.getClass().getName());
       }
 
-      private String formatTemporalString(
+      String formatTemporalString(
                   String value,
                   DateTimeFormatter formatter,
                   ZoneId zoneId) {
@@ -1022,29 +1022,29 @@ public final class ExpressionEvaluator {
             throw new IllegalArgumentException("Unsupported date/time text: " + value);
       }
 
-      private record FilteredExpression(
+      record FilteredExpression(
                   String valueExpression,
                   List<String> filters) {
       }
 
-      private record FilterCall(
+      record FilterCall(
                   String name,
                   String argumentExpression) {
       }
 
-      private record TernaryExpression(
+      record TernaryExpression(
                   String condition,
                   String trueExpression,
                   String falseExpression) {
       }
 
-      private record Comparison(
+      record Comparison(
                   String left,
                   String operator,
                   String right) {
       }
 
-      private int findTopLevelSlash(String expression) {
+      int findTopLevelSlash(String expression) {
             boolean insideSingleQuote = false;
             boolean insideDoubleQuote = false;
             int parenthesisDepth = 0;
@@ -1084,7 +1084,7 @@ public final class ExpressionEvaluator {
             return -1;
       }
 
-      private int findTopLevelChar(String expression, char targetChar) {
+      int findTopLevelChar(String expression, char targetChar) {
             boolean insideSingleQuote = false;
             boolean insideDoubleQuote = false;
             int parenthesisDepth = 0;

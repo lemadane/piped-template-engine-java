@@ -9,7 +9,7 @@ import java.util.List;
 import java.util.Map;
 
 public final class StateNode implements ASTNode {
-    private final Map<String, String> stateMap;
+    final Map<String, String> stateMap;
 
     public StateNode(Map<String, String> stateMap) {
         this.stateMap = stateMap == null ? Map.of() : stateMap;
@@ -42,7 +42,7 @@ public final class StateNode implements ASTNode {
         writer.write(output);
     }
 
-    private boolean isNumeric(String s) {
+    boolean isNumeric(String s) {
         if (s == null || s.isEmpty()) return false;
         return s.matches("-?\\d+(\\.\\d+)?");
     }

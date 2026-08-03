@@ -7,10 +7,10 @@ import java.util.ArrayList;
 import java.util.List;
 
 public final class HTMXNode implements ASTNode {
-    private final String src;
-    private final List<String> extensions;
-    private final String config;
-    private final boolean indicator;
+    final String src;
+    final List<String> extensions;
+    final String config;
+    final boolean indicator;
 
     public HTMXNode(String src, List<String> extensions, String config, boolean indicator) {
         this.src = src;
@@ -50,7 +50,7 @@ public final class HTMXNode implements ASTNode {
         writer.write(String.join("\n", tags));
     }
 
-    private String escapeHtml(String s) {
+    String escapeHtml(String s) {
         if (s == null) return "";
         return s.replace("&", "&amp;")
                 .replace("<", "&lt;")

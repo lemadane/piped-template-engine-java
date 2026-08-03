@@ -11,13 +11,13 @@ import java.util.HashMap;
 import java.util.Map;
 
 public final class ForNode implements ASTNode {
-    private final String varName;
-    private final String startExpression;
-    private final String endExpression;
-    private final String stepExpression;
-    private final ASTNode bodyBlock;
-    private final ASTNode elseBlock;
-    private final ExpressionEvaluator evaluator;
+    final String varName;
+    final String startExpression;
+    final String endExpression;
+    final String stepExpression;
+    final ASTNode bodyBlock;
+    final ASTNode elseBlock;
+    final ExpressionEvaluator evaluator;
 
     public ForNode(
             String varName,
@@ -128,7 +128,7 @@ public final class ForNode implements ASTNode {
         }
     }
 
-    private int toInt(Object val, String expr) {
+    int toInt(Object val, String expr) {
         if (val == null) {
             throw new TemplateRenderException("Expression '" + expr + "' evaluated to null");
         }

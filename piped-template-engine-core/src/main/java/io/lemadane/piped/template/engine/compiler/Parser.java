@@ -8,34 +8,53 @@ import java.util.ArrayList;
 import java.util.List;
 
 public final class Parser {
-    private final OutputExpressionParser outputExpressionParser = new OutputExpressionParser();
-    private final ExpressionEvaluator evaluator = new ExpressionEvaluator();
-    private final ThreadLocal<java.util.Map<String, Object>> threadLocalMetadata = ThreadLocal.withInitial(java.util.HashMap::new);
-
-    private int loopDepth = 0;
+    final OutputExpressionParser outputExpressionParser = new OutputExpressionParser();
+    final ExpressionEvaluator evaluator = new ExpressionEvaluator();
 
     public CompiledTemplate parse(List<Token> tokens) {
-        Cursor cursor = new Cursor(tokens);
-        threadLocalMetadata.get().clear();
-        BlockNode root = parseBlock(cursor, null);
-        if (cursor.hasNext()) {
-            Token t = cursor.peek();
-            if (t.type() == TokenType.ELSE) {
-                throw new TemplateSyntaxException("Unexpected |else| without matching block at index " + t.position());
-            } else if (t.type() == TokenType.END_IF) {
-                throw new TemplateSyntaxException("Unexpected |/if| without matching |if| at index " + t.position());
-            } else if (t.type() == TokenType.END_EACH) {
-                throw new TemplateSyntaxException("Unexpected |/each| without matching |each| at index " + t.position());
-            } else if (t.type() == TokenType.END_FOR) {
-                throw new TemplateSyntaxException("Unexpected |/for| without matching |for| at index " + t.position());
-            }
-        }
-        java.util.Map<String, Object> metadata = new java.util.HashMap<>(threadLocalMetadata.get());
-        threadLocalMetadata.get().clear();
-        return new CompiledTemplate(root, metadata);
+        return parse(tokens, false);
     }
 
-    private BlockNode parseBlock(Cursor cursor, TokenType stopToken) {
+    public CompiledTemplate parse(List<Token> tokens, boolean inComponentTemplate) {
+        Cursor cursor = new Cursor(tokens);
+        ParseContext ctx = new ParseContext();
+        ctx.setInComponentTemplate(inComponentTemplate);
+
+        BlockNode root = parseBlock(cursor, ctx, null, null);
+
+        if (cursor.hasNext()) {
+            Token t = cursor.peek();
+            throw new TemplateSyntaxException(String.format("Unexpected token |%s| at line %d, column %d.",
+                    t.value(), t.line(), t.column()));
+        }
+
+        boolean hasLayout = root.getChildren().stream().anyMatch(c -> c instanceof LayoutNode);
+        boolean hasSection = root.getChildren().stream().anyMatch(c -> c instanceof SectionNode);
+
+        if (hasSection && !hasLayout) {
+            throw new TemplateSyntaxException("Section directive is only allowed in templates that specify a |layout|.");
+        }
+
+        if (hasLayout) {
+            boolean seenNonWhitespace = false;
+            for (ASTNode child : root.getChildren()) {
+                if (child instanceof TextNode tn && tn.getText().isBlank()) {
+                    continue;
+                }
+                if (child instanceof LayoutNode) {
+                    if (seenNonWhitespace) {
+                        throw new TemplateSyntaxException("Layout directive must be the first directive in a template.");
+                    }
+                } else {
+                    seenNonWhitespace = true;
+                }
+            }
+        }
+
+        return new CompiledTemplate(root, ctx.getMetadata());
+    }
+
+    BlockNode parseBlock(Cursor cursor, ParseContext ctx, TokenType stopToken, String directiveName) {
         List<ASTNode> nodes = new ArrayList<>();
 
         while (cursor.hasNext()) {
@@ -45,11 +64,11 @@ public final class Parser {
                 break;
             }
 
-            if (switchSectionDepth > 0 && (token.type() == TokenType.CASE || token.type() == TokenType.DEFAULT || token.type() == TokenType.END_SWITCH)) {
+            if (ctx.getSwitchSectionDepth() > 0 && (token.type() == TokenType.CASE || token.type() == TokenType.DEFAULT || token.type() == TokenType.END_SWITCH)) {
                 break;
             }
 
-            if (attemptDepth > 0 && (token.type() == TokenType.RECOVER || token.type() == TokenType.END_ATTEMPT)) {
+            if (ctx.getAttemptDepth() > 0 && (token.type() == TokenType.RECOVER || token.type() == TokenType.END_ATTEMPT)) {
                 break;
             }
 
@@ -66,49 +85,71 @@ public final class Parser {
                     var outputExpr = outputExpressionParser.parse(token.value());
                     nodes.add(new ExpressionNode(outputExpr, evaluator));
                 }
-                case IF -> nodes.add(parseIf(token, cursor));
-                case EACH -> nodes.add(parseEach(token, cursor));
-                case FOR -> nodes.add(parseFor(token, cursor));
-                case SWITCH -> nodes.add(parseSwitch(token, cursor));
-                case CASE -> throw new TemplateSyntaxException("Unexpected |case| without matching |switch|.");
-                case DEFAULT -> throw new TemplateSyntaxException("Unexpected |default| without matching |switch|.");
-                case FALLTHROUGH -> nodes.add(new io.lemadane.piped.template.engine.ast.FallthroughNode());
-                case END_SWITCH -> throw new TemplateSyntaxException("Unexpected |/switch| without matching |switch|.");
-                case RECOVER -> throw new TemplateSyntaxException("Unexpected |recover| without matching |attempt|.");
-                case END_ATTEMPT -> throw new TemplateSyntaxException("Unexpected |/attempt| without matching |attempt|.");
-                case BREAK -> {
-                    if (loopDepth == 0) {
-                        throw new TemplateSyntaxException("|break| is only allowed inside a loop.");
+                case IF -> nodes.add(parseIf(token, cursor, ctx));
+                case EACH -> nodes.add(parseEach(token, cursor, ctx));
+                case FOR -> nodes.add(parseFor(token, cursor, ctx));
+                case SWITCH -> nodes.add(parseSwitch(token, cursor, ctx));
+                case CASE -> throw new TemplateSyntaxException(String.format("Unexpected |case| at line %d, column %d without matching |switch|.", token.line(), token.column()));
+                case DEFAULT -> throw new TemplateSyntaxException(String.format("Unexpected |default| at line %d, column %d without matching |switch|.", token.line(), token.column()));
+                case FALLTHROUGH -> {
+                    if (!ctx.isInSwitch()) {
+                        throw new TemplateSyntaxException(String.format("Unexpected |fallthrough| at line %d, column %d outside of a |switch| block.", token.line(), token.column()));
                     }
-                    nodes.add(new io.lemadane.piped.template.engine.ast.BreakNode());
+                    nodes.add(new FallthroughNode());
+                }
+                case END_SWITCH -> throw new TemplateSyntaxException(String.format("Unexpected |/switch| at line %d, column %d without matching |switch|.", token.line(), token.column()));
+                case RECOVER -> throw new TemplateSyntaxException(String.format("Unexpected |recover| at line %d, column %d without matching |attempt|.", token.line(), token.column()));
+                case END_ATTEMPT -> throw new TemplateSyntaxException(String.format("Unexpected |/attempt| at line %d, column %d without matching |attempt|.", token.line(), token.column()));
+                case END_IF -> throw new TemplateSyntaxException(String.format("Unexpected |/if| at line %d, column %d without matching |if|.", token.line(), token.column()));
+                case END_EACH -> throw new TemplateSyntaxException(String.format("Unexpected |/each| at line %d, column %d without matching |each|.", token.line(), token.column()));
+                case END_FOR -> throw new TemplateSyntaxException(String.format("Unexpected |/for| at line %d, column %d without matching |for|.", token.line(), token.column()));
+                case END_MACRO -> throw new TemplateSyntaxException(String.format("Unexpected |/macro| at line %d, column %d without matching |macro|.", token.line(), token.column()));
+                case END_FRAGMENT -> throw new TemplateSyntaxException(String.format("Unexpected |/fragment| at line %d, column %d without matching |fragment|.", token.line(), token.column()));
+                case END_MINIFY -> throw new TemplateSyntaxException(String.format("Unexpected |/minify| at line %d, column %d without matching |minify|.", token.line(), token.column()));
+                case END_SECTION -> throw new TemplateSyntaxException(String.format("Unexpected |/section| at line %d, column %d without matching |section|.", token.line(), token.column()));
+                case END_COMPONENT -> throw new TemplateSyntaxException(String.format("Unexpected |/component| at line %d, column %d without matching |component|.", token.line(), token.column()));
+                case END_SLOT -> throw new TemplateSyntaxException(String.format("Unexpected |/slot| at line %d, column %d without matching |slot|.", token.line(), token.column()));
+                case END_SEPARATOR -> throw new TemplateSyntaxException(String.format("Unexpected |/separator| at line %d, column %d without matching |separator|.", token.line(), token.column()));
+                case BREAK -> {
+                    if (ctx.getLoopDepth() == 0) {
+                        throw new TemplateSyntaxException(String.format("|break| is only allowed inside a loop (line %d, column %d).", token.line(), token.column()));
+                    }
+                    nodes.add(new BreakNode());
                 }
                 case CONTINUE -> {
-                    if (loopDepth == 0) {
-                        throw new TemplateSyntaxException("|continue| is only allowed inside a loop.");
+                    if (ctx.getLoopDepth() == 0) {
+                        throw new TemplateSyntaxException(String.format("|continue| is only allowed inside a loop (line %d, column %d).", token.line(), token.column()));
                     }
-                    nodes.add(new io.lemadane.piped.template.engine.ast.ContinueNode());
+                    nodes.add(new ContinueNode());
                 }
-                case END_FOR -> throw new TemplateSyntaxException("Unexpected |/for| without matching |for|.");
                 case MODEL -> nodes.add(new ModelNode(token.value().substring("model ".length()).trim()));
                 case FIELD -> nodes.add(new FieldNode(token.value().substring("field ".length()).trim(), evaluator));
                 case DISPLAY -> nodes.add(new DisplayNode(token.value().substring("display ".length()).trim(), evaluator));
                 case EDITOR -> nodes.add(new EditorNode(token.value().substring("editor ".length()).trim(), evaluator));
-                case MACRO -> nodes.add(parseMacro(token, cursor));
+                case MACRO -> nodes.add(parseMacro(token, cursor, ctx));
                 case CALL -> nodes.add(parseCallMacro(token));
                 case SEPARATOR -> {
-                    if (eachDepth == 0) {
-                        throw new TemplateSyntaxException("|separator| is only allowed directly inside an |each| loop.");
+                    if (ctx.getEachDepth() == 0) {
+                        throw new TemplateSyntaxException(String.format("|separator| is only allowed directly inside an |each| loop (line %d, column %d).", token.line(), token.column()));
                     }
-                    ASTNode sepBody = parseBlock(cursor, TokenType.END_SEPARATOR);
+                    ASTNode sepBody = parseBlock(cursor, ctx, TokenType.END_SEPARATOR, "separator");
                     if (cursor.hasNext() && cursor.peek().type() == TokenType.END_SEPARATOR) {
                         cursor.next();
+                    } else {
+                        throw new TemplateSyntaxException(formatUnclosedError("separator", token, "/separator"));
                     }
-                    nodes.add(new io.lemadane.piped.template.engine.ast.SeparatorNode(sepBody));
+                    nodes.add(new SeparatorNode(sepBody));
                 }
-                case FRAGMENT -> nodes.add(parseFragment(token, cursor));
-                case MINIFY -> nodes.add(parseMinify(token, cursor));
-                case PAGE -> parsePageMetadata(token);
-                case ATTEMPT -> nodes.add(parseAttempt(token, cursor));
+                case FRAGMENT -> nodes.add(parseFragment(token, cursor, ctx));
+                case MINIFY -> nodes.add(parseMinify(token, cursor, ctx));
+                case PAGE -> parsePageMetadata(token, ctx);
+                case ATTEMPT -> nodes.add(parseAttempt(token, cursor, ctx));
+                case INCLUDE -> nodes.add(parseInclude(token));
+                case LAYOUT -> nodes.add(parseLayout(token, cursor, ctx));
+                case SECTION -> nodes.add(parseSection(token, cursor, ctx));
+                case YIELD -> nodes.add(parseYield(token));
+                case COMPONENT -> nodes.add(parseComponent(token, cursor, ctx));
+                case SLOT -> nodes.add(parseSlot(token, cursor, ctx));
                 case PWA -> nodes.add(parsePWA(token));
                 case HTMX -> nodes.add(parseHTMX(token));
                 case HX_ATTR -> nodes.add(parseHXAttr(token));
@@ -125,26 +166,40 @@ public final class Parser {
         return new BlockNode(nodes);
     }
 
-    private IfNode parseIf(Token ifToken, Cursor cursor) {
+    IfNode parseIf(Token ifToken, Cursor cursor, ParseContext ctx) {
         String condition = ifToken.value().substring("if ".length()).trim();
-        ASTNode thenBlock = parseBlock(cursor, TokenType.END_IF);
+        if (condition.isBlank()) {
+            throw new TemplateSyntaxException(String.format("|if| condition must not be empty at line %d, column %d.", ifToken.line(), ifToken.column()));
+        }
+
+        ASTNode thenBlock = parseBlock(cursor, ctx, TokenType.END_IF, "if");
 
         List<IfNode.ElseIfBranch> elseIfBranches = new ArrayList<>();
         ASTNode elseBlock = null;
+        boolean hasElse = false;
 
         while (cursor.hasNext() && cursor.peek().type() != TokenType.END_IF) {
             Token current = cursor.peek();
             if (current.type() == TokenType.ELSE_IF) {
+                if (hasElse) {
+                    throw new TemplateSyntaxException(String.format("|else if| is not allowed after |else| at line %d, column %d.", current.line(), current.column()));
+                }
                 cursor.next();
                 String elseIfCondition = current.value().startsWith("else-if ")
                         ? current.value().substring("else-if ".length()).trim()
                         : current.value().substring("else if ".length()).trim();
-                ASTNode elseIfBody = parseBlock(cursor, TokenType.END_IF);
+                if (elseIfCondition.isBlank()) {
+                    throw new TemplateSyntaxException(String.format("|else if| condition must not be empty at line %d, column %d.", current.line(), current.column()));
+                }
+                ASTNode elseIfBody = parseBlock(cursor, ctx, TokenType.END_IF, "if");
                 elseIfBranches.add(new IfNode.ElseIfBranch(elseIfCondition, elseIfBody));
             } else if (current.type() == TokenType.ELSE) {
+                if (hasElse) {
+                    throw new TemplateSyntaxException(String.format("Duplicate |else| block inside |if| at line %d, column %d.", current.line(), current.column()));
+                }
                 cursor.next();
-                elseBlock = parseBlock(cursor, TokenType.END_IF);
-                break;
+                hasElse = true;
+                elseBlock = parseBlock(cursor, ctx, TokenType.END_IF, "if");
             } else {
                 break;
             }
@@ -152,48 +207,51 @@ public final class Parser {
 
         if (cursor.hasNext() && cursor.peek().type() == TokenType.END_IF) {
             cursor.next();
+        } else {
+            throw new TemplateSyntaxException(formatUnclosedError("if", ifToken, "/if"));
         }
 
         return new IfNode(condition, thenBlock, elseIfBranches, elseBlock, evaluator);
     }
 
-    private int eachDepth = 0;
-
-    private EachNode parseEach(Token eachToken, Cursor cursor) {
-        eachDepth++;
-        loopDepth++;
+    EachNode parseEach(Token eachToken, Cursor cursor, ParseContext ctx) {
+        ctx.incrementEachDepth();
+        ctx.incrementLoopDepth();
         try {
             String statement = eachToken.value().substring("each ".length()).trim();
             int inIndex = statement.indexOf(" in ");
             if (inIndex == -1) {
-                throw new TemplateSyntaxException("Invalid each statement format. Expected '|each item in items|'");
+                throw new TemplateSyntaxException(String.format("Invalid each statement format at line %d, column %d. Expected '|each item in items|'", eachToken.line(), eachToken.column()));
             }
 
             String itemName = statement.substring(0, inIndex).trim();
             String collectionExpr = statement.substring(inIndex + 4).trim();
+            if (itemName.isBlank() || collectionExpr.isBlank()) {
+                throw new TemplateSyntaxException(String.format("Invalid each statement syntax at line %d, column %d.", eachToken.line(), eachToken.column()));
+            }
 
-            ASTNode bodyBlock = parseBlock(cursor, TokenType.END_EACH);
+            ASTNode bodyBlock = parseBlock(cursor, ctx, TokenType.END_EACH, "each");
             ASTNode elseBlock = null;
 
             if (cursor.hasNext() && cursor.peek().type() == TokenType.ELSE) {
                 cursor.next();
-                elseBlock = parseBlock(cursor, TokenType.END_EACH);
+                elseBlock = parseBlock(cursor, ctx, TokenType.END_EACH, "each");
                 if (cursor.hasNext() && cursor.peek().type() == TokenType.ELSE) {
-                    throw new TemplateSyntaxException("Multiple |else| blocks inside loop.");
+                    throw new TemplateSyntaxException(String.format("Multiple |else| blocks inside loop at line %d, column %d.", cursor.peek().line(), cursor.peek().column()));
                 }
             }
 
             if (cursor.hasNext() && cursor.peek().type() == TokenType.END_EACH) {
                 cursor.next();
             } else {
-                throw new TemplateSyntaxException("Missing closing |/each|.");
+                throw new TemplateSyntaxException(formatUnclosedError("each", eachToken, "/each"));
             }
 
             ASTNode separatorNode = null;
             if (bodyBlock instanceof BlockNode blockNode) {
                 List<ASTNode> bodyChildren = new ArrayList<>();
                 for (ASTNode child : blockNode.getChildren()) {
-                    if (child instanceof io.lemadane.piped.template.engine.ast.SeparatorNode sep) {
+                    if (child instanceof SeparatorNode sep) {
                         separatorNode = sep;
                     } else {
                         bodyChildren.add(child);
@@ -204,35 +262,35 @@ public final class Parser {
 
             return new EachNode(itemName, collectionExpr, bodyBlock, elseBlock, separatorNode, evaluator);
         } finally {
-            eachDepth--;
-            loopDepth--;
+            ctx.decrementEachDepth();
+            ctx.decrementLoopDepth();
         }
     }
 
-    private io.lemadane.piped.template.engine.ast.ForNode parseFor(Token forToken, Cursor cursor) {
-        eachDepth++;
-        loopDepth++;
+    ForNode parseFor(Token forToken, Cursor cursor, ParseContext ctx) {
+        ctx.incrementEachDepth();
+        ctx.incrementLoopDepth();
         try {
             String statement = forToken.value().substring("for ".length()).trim();
             int fromIndex = statement.indexOf(" from ");
             if (fromIndex == -1) {
-                throw new TemplateSyntaxException("Invalid for statement format. Missing 'from' keyword.");
+                throw new TemplateSyntaxException(String.format("Invalid for statement format at line %d, column %d. Missing 'from' keyword.", forToken.line(), forToken.column()));
             }
 
             String itemName = statement.substring(0, fromIndex).trim();
             if (itemName.isEmpty()) {
-                throw new TemplateSyntaxException("Missing loop variable in for directive.");
+                throw new TemplateSyntaxException(String.format("Missing loop variable in for directive at line %d, column %d.", forToken.line(), forToken.column()));
             }
 
             String fromRemainder = statement.substring(fromIndex + 6).trim();
             int toIndex = fromRemainder.indexOf(" to ");
             if (toIndex == -1) {
-                throw new TemplateSyntaxException("Invalid for statement format. Missing 'to' boundary.");
+                throw new TemplateSyntaxException(String.format("Invalid for statement format at line %d, column %d. Missing 'to' boundary.", forToken.line(), forToken.column()));
             }
 
             String startExpr = fromRemainder.substring(0, toIndex).trim();
             if (startExpr.isEmpty()) {
-                throw new TemplateSyntaxException("Missing start expression in for directive.");
+                throw new TemplateSyntaxException(String.format("Missing start expression in for directive at line %d, column %d.", forToken.line(), forToken.column()));
             }
 
             String toRemainder = fromRemainder.substring(toIndex + 4).trim();
@@ -244,114 +302,152 @@ public final class Parser {
                 endExpr = toRemainder.substring(0, stepIndex).trim();
                 stepExpr = toRemainder.substring(stepIndex + 6).trim();
                 if (stepExpr.isEmpty()) {
-                    throw new TemplateSyntaxException("Missing step expression in for directive.");
+                    throw new TemplateSyntaxException(String.format("Missing step expression in for directive at line %d, column %d.", forToken.line(), forToken.column()));
                 }
             } else {
                 endExpr = toRemainder.trim();
             }
 
             if (endExpr.isEmpty()) {
-                throw new TemplateSyntaxException("Missing end expression in for directive.");
+                throw new TemplateSyntaxException(String.format("Missing end expression in for directive at line %d, column %d.", forToken.line(), forToken.column()));
             }
 
-            ASTNode bodyBlock = parseBlock(cursor, TokenType.END_FOR);
+            ASTNode bodyBlock = parseBlock(cursor, ctx, TokenType.END_FOR, "for");
             ASTNode elseBlock = null;
 
             if (cursor.hasNext() && cursor.peek().type() == TokenType.ELSE) {
                 cursor.next();
-                elseBlock = parseBlock(cursor, TokenType.END_FOR);
+                elseBlock = parseBlock(cursor, ctx, TokenType.END_FOR, "for");
                 if (cursor.hasNext() && cursor.peek().type() == TokenType.ELSE) {
-                    throw new TemplateSyntaxException("Multiple |else| blocks inside loop.");
+                    throw new TemplateSyntaxException(String.format("Multiple |else| blocks inside loop at line %d, column %d.", cursor.peek().line(), cursor.peek().column()));
                 }
             }
 
             if (cursor.hasNext() && cursor.peek().type() == TokenType.END_FOR) {
                 cursor.next();
             } else {
-                throw new TemplateSyntaxException("Missing closing |/for|.");
+                throw new TemplateSyntaxException(formatUnclosedError("for", forToken, "/for"));
             }
 
-            return new io.lemadane.piped.template.engine.ast.ForNode(
-                    itemName, startExpr, endExpr, stepExpr, bodyBlock, elseBlock, evaluator);
+            return new ForNode(itemName, startExpr, endExpr, stepExpr, bodyBlock, elseBlock, evaluator);
         } finally {
-            eachDepth--;
-            loopDepth--;
+            ctx.decrementEachDepth();
+            ctx.decrementLoopDepth();
         }
     }
 
-    private int switchSectionDepth = 0;
-
-    private ASTNode parseSwitchSectionBlock(Cursor cursor) {
-        switchSectionDepth++;
+    ASTNode parseSwitchSectionBlock(Cursor cursor, ParseContext ctx) {
+        ctx.incrementSwitchSectionDepth();
         try {
-            return parseBlock(cursor, null);
+            return parseBlock(cursor, ctx, null, null);
         } finally {
-            switchSectionDepth--;
+            ctx.decrementSwitchSectionDepth();
         }
     }
 
-    private io.lemadane.piped.template.engine.ast.SwitchNode parseSwitch(Token switchToken, Cursor cursor) {
+    SwitchNode parseSwitch(Token switchToken, Cursor cursor, ParseContext ctx) {
         String switchExpr = switchToken.value().substring("switch ".length()).trim();
         if (switchExpr.isBlank()) {
-            throw new TemplateSyntaxException("|switch| expression must not be empty.");
+            throw new TemplateSyntaxException(String.format("|switch| expression must not be empty at line %d, column %d.", switchToken.line(), switchToken.column()));
         }
 
-        List<io.lemadane.piped.template.engine.ast.SwitchNode.SwitchCase> cases = new ArrayList<>();
+        boolean prevInSwitch = ctx.isInSwitch();
+        ctx.setInSwitch(true);
+
+        List<SwitchNode.SwitchCase> cases = new ArrayList<>();
         ASTNode defaultBlock = null;
 
-        while (cursor.hasNext() && cursor.peek().type() != TokenType.END_SWITCH) {
-            Token token = cursor.peek();
-            if (token.type() == TokenType.CASE) {
-                cursor.next();
-                String caseExpr = token.value().substring("case ".length()).trim();
-                if (caseExpr.isBlank()) {
-                    throw new TemplateSyntaxException("|case| expression must not be empty.");
-                }
-                if (defaultBlock != null) {
-                    throw new TemplateSyntaxException("|case| is not allowed after |default|.");
-                }
+        try {
+            while (cursor.hasNext() && cursor.peek().type() != TokenType.END_SWITCH) {
+                Token token = cursor.peek();
+                if (token.type() == TokenType.CASE) {
+                    cursor.next();
+                    String caseExpr = token.value().substring("case ".length()).trim();
+                    if (caseExpr.isBlank()) {
+                        throw new TemplateSyntaxException(String.format("|case| expression must not be empty at line %d, column %d.", token.line(), token.column()));
+                    }
+                    if (defaultBlock != null) {
+                        throw new TemplateSyntaxException(String.format("|case| is not allowed after |default| at line %d, column %d.", token.line(), token.column()));
+                    }
 
-                ASTNode caseBody = parseSwitchSectionBlock(cursor);
-                boolean hasFallthrough = extractAndCheckFallthrough(caseBody);
-                cases.add(new io.lemadane.piped.template.engine.ast.SwitchNode.SwitchCase(caseExpr, caseBody, hasFallthrough));
-            } else if (token.type() == TokenType.DEFAULT) {
-                cursor.next();
-                if (defaultBlock != null) {
-                    throw new TemplateSyntaxException("Only one |default| is allowed inside |switch|.");
+                    ASTNode caseBody = parseSwitchSectionBlock(cursor, ctx);
+                    boolean hasFallthrough = validateAndCheckFallthrough(caseBody, false, token);
+                    cases.add(new SwitchNode.SwitchCase(caseExpr, caseBody, hasFallthrough));
+                } else if (token.type() == TokenType.DEFAULT) {
+                    cursor.next();
+                    if (defaultBlock != null) {
+                        throw new TemplateSyntaxException(String.format("Only one |default| is allowed inside |switch| at line %d, column %d.", token.line(), token.column()));
+                    }
+                    ASTNode defBody = parseSwitchSectionBlock(cursor, ctx);
+                    validateAndCheckFallthrough(defBody, true, token);
+                    defaultBlock = defBody;
+                } else if (token.type() == TokenType.TEXT && token.value().isBlank()) {
+                    cursor.next();
+                } else if (token.type() == TokenType.COMMENT) {
+                    cursor.next();
+                } else {
+                    throw new TemplateSyntaxException(String.format("Unexpected content before first case in |switch| at line %d, column %d: %s", token.line(), token.column(), token.value()));
                 }
-                ASTNode defBody = parseSwitchSectionBlock(cursor);
-                extractAndCheckFallthrough(defBody);
-                defaultBlock = defBody;
-            } else if (token.type() == TokenType.TEXT && token.value().isBlank()) {
-                cursor.next();
-            } else if (token.type() == TokenType.COMMENT) {
+            }
+
+            if (cursor.hasNext() && cursor.peek().type() == TokenType.END_SWITCH) {
                 cursor.next();
             } else {
-                throw new TemplateSyntaxException("Unexpected token inside |switch|: " + token.value());
+                throw new TemplateSyntaxException(formatUnclosedError("switch", switchToken, "/switch"));
+            }
+
+            if (cases.isEmpty() && defaultBlock == null) {
+                throw new TemplateSyntaxException(String.format("Empty |switch| block without cases or default at line %d, column %d.", switchToken.line(), switchToken.column()));
+            }
+
+            return new SwitchNode(switchExpr, cases, defaultBlock, evaluator);
+        } finally {
+            ctx.setInSwitch(prevInSwitch);
+        }
+    }
+
+    boolean validateAndCheckFallthrough(ASTNode block, boolean isDefaultBlock, Token caseToken) {
+        if (!(block instanceof BlockNode blockNode)) {
+            return false;
+        }
+
+        List<ASTNode> children = blockNode.getChildren();
+        int fallthroughCount = 0;
+        int fallthroughIndex = -1;
+
+        for (int i = 0; i < children.size(); i++) {
+            ASTNode child = children.get(i);
+            if (child instanceof FallthroughNode) {
+                fallthroughCount++;
+                fallthroughIndex = i;
             }
         }
 
-        if (cursor.hasNext() && cursor.peek().type() == TokenType.END_SWITCH) {
-            cursor.next();
-        } else {
-            throw new TemplateSyntaxException("Missing closing |/switch|.");
+        if (fallthroughCount == 0) {
+            return false;
         }
 
-        return new io.lemadane.piped.template.engine.ast.SwitchNode(switchExpr, cases, defaultBlock, evaluator);
-    }
+        if (isDefaultBlock) {
+            throw new TemplateSyntaxException(String.format("|fallthrough| is forbidden inside |default| case at line %d, column %d.", caseToken.line(), caseToken.column()));
+        }
 
-    private boolean extractAndCheckFallthrough(ASTNode block) {
-        if (block instanceof BlockNode blockNode) {
-            for (ASTNode child : blockNode.getChildren()) {
-                if (child instanceof io.lemadane.piped.template.engine.ast.FallthroughNode) {
-                    return true;
-                }
+        if (fallthroughCount > 1) {
+            throw new TemplateSyntaxException(String.format("Multiple |fallthrough| directives found in single case at line %d, column %d.", caseToken.line(), caseToken.column()));
+        }
+
+        // Ensure fallthrough is terminal (only trailing whitespace or comments follow)
+        for (int i = fallthroughIndex + 1; i < children.size(); i++) {
+            ASTNode trailing = children.get(i);
+            if (trailing instanceof TextNode tn && tn.getText().isBlank()) {
+                continue;
             }
+            throw new TemplateSyntaxException(String.format("Non-terminal |fallthrough| directive found at line %d, column %d.", caseToken.line(), caseToken.column()));
         }
-        return false;
+
+        return true;
     }
 
-    private io.lemadane.piped.template.engine.ast.MacroNode parseMacro(Token macroToken, Cursor cursor) {
+    MacroNode parseMacro(Token macroToken, Cursor cursor, ParseContext ctx) {
         String val = macroToken.value().substring("macro ".length()).trim();
         int openParen = val.indexOf('(');
         int closeParen = val.indexOf(')');
@@ -362,23 +458,36 @@ public final class Parser {
             name = val.substring(0, openParen).trim();
             String argsStr = val.substring(openParen + 1, closeParen).trim();
             if (!argsStr.isEmpty()) {
-                for (String p : argsStr.split(",")) {
-                    params.add(p.trim());
+                String[] parts = argsStr.split(",");
+                for (String p : parts) {
+                    String param = p.trim();
+                    if (param.isEmpty()) {
+                        throw new TemplateSyntaxException(String.format("Malformed parameter list in macro declaration at line %d, column %d.", macroToken.line(), macroToken.column()));
+                    }
+                    params.add(param);
                 }
             }
+        } else if (openParen != -1 || closeParen != -1) {
+            throw new TemplateSyntaxException(String.format("Malformed macro declaration at line %d, column %d.", macroToken.line(), macroToken.column()));
         } else {
             name = val;
         }
 
-        ASTNode body = parseBlock(cursor, TokenType.END_MACRO);
-        if (cursor.hasNext() && cursor.peek().type() == TokenType.END_MACRO) {
-            cursor.next();
+        if (name.isBlank()) {
+            throw new TemplateSyntaxException(String.format("Macro name must not be empty at line %d, column %d.", macroToken.line(), macroToken.column()));
         }
 
-        return new io.lemadane.piped.template.engine.ast.MacroNode(name, params, body);
+        ASTNode body = parseBlock(cursor, ctx, TokenType.END_MACRO, "macro");
+        if (cursor.hasNext() && cursor.peek().type() == TokenType.END_MACRO) {
+            cursor.next();
+        } else {
+            throw new TemplateSyntaxException(formatUnclosedError("macro", macroToken, "/macro"));
+        }
+
+        return new MacroNode(name, params, body);
     }
 
-    private io.lemadane.piped.template.engine.ast.CallMacroNode parseCallMacro(Token callToken) {
+    CallMacroNode parseCallMacro(Token callToken) {
         String val = callToken.value().substring("call ".length()).trim();
         int openParen = val.indexOf('(');
         int closeParen = val.lastIndexOf(')');
@@ -397,38 +506,241 @@ public final class Parser {
             name = val;
         }
 
-        return new io.lemadane.piped.template.engine.ast.CallMacroNode(name, args, evaluator);
+        if (name.isBlank()) {
+            throw new TemplateSyntaxException(String.format("Call macro name must not be empty at line %d, column %d.", callToken.line(), callToken.column()));
+        }
+
+        return new CallMacroNode(name, args, evaluator);
     }
 
-    private io.lemadane.piped.template.engine.ast.FragmentNode parseFragment(Token fragmentToken, Cursor cursor) {
+    FragmentNode parseFragment(Token fragmentToken, Cursor cursor, ParseContext ctx) {
         String name = fragmentToken.value().substring("fragment ".length()).trim();
-        ASTNode body = parseBlock(cursor, TokenType.END_FRAGMENT);
+        if (name.isBlank()) {
+            throw new TemplateSyntaxException(String.format("Fragment name must not be empty at line %d, column %d.", fragmentToken.line(), fragmentToken.column()));
+        }
+
+        ASTNode body = parseBlock(cursor, ctx, TokenType.END_FRAGMENT, "fragment");
         if (cursor.hasNext() && cursor.peek().type() == TokenType.END_FRAGMENT) {
             cursor.next();
+        } else {
+            throw new TemplateSyntaxException(formatUnclosedError("fragment", fragmentToken, "/fragment"));
         }
-        return new io.lemadane.piped.template.engine.ast.FragmentNode(name, body);
+        return new FragmentNode(name, body);
     }
 
-    private io.lemadane.piped.template.engine.ast.MinifyNode parseMinify(Token minifyToken, Cursor cursor) {
-        ASTNode body = parseBlock(cursor, TokenType.END_MINIFY);
+    MinifyNode parseMinify(Token minifyToken, Cursor cursor, ParseContext ctx) {
+        ASTNode body = parseBlock(cursor, ctx, TokenType.END_MINIFY, "minify");
         if (cursor.hasNext() && cursor.peek().type() == TokenType.END_MINIFY) {
             cursor.next();
+        } else {
+            throw new TemplateSyntaxException(formatUnclosedError("minify", minifyToken, "/minify"));
         }
-        return new io.lemadane.piped.template.engine.ast.MinifyNode(body);
+        return new MinifyNode(body);
     }
 
-    private void parsePageMetadata(Token token) {
+    IncludeNode parseInclude(Token token) {
+        String statement = token.value().substring("include ".length()).trim();
+        if (statement.isBlank()) {
+            throw new TemplateSyntaxException(String.format("Include path must not be empty at line %d, column %d.", token.line(), token.column()));
+        }
+        if (statement.endsWith(" with")) {
+            throw new TemplateSyntaxException(String.format("Include expression after 'with' must not be empty at line %d, column %d.", token.line(), token.column()));
+        }
+        int withIndex = statement.indexOf(" with ");
+        String templatePath;
+        String modelExpr = null;
+        if (withIndex != -1) {
+            templatePath = statement.substring(0, withIndex).trim();
+            modelExpr = statement.substring(withIndex + 6).trim();
+            if (modelExpr.isBlank()) {
+                throw new TemplateSyntaxException(String.format("Include expression after 'with' must not be empty at line %d, column %d.", token.line(), token.column()));
+            }
+        } else {
+            templatePath = statement;
+        }
+        if (templatePath.startsWith("/") || templatePath.contains("..")) {
+            throw new TemplateSyntaxException(String.format("Include path '%s' is not allowed at line %d, column %d.", templatePath, token.line(), token.column()));
+        }
+        return new IncludeNode(templatePath, modelExpr, evaluator);
+    }
+
+    LayoutNode parseLayout(Token token, Cursor cursor, ParseContext ctx) {
+        String layoutPath = token.value().substring("layout ".length()).trim();
+        if (layoutPath.isBlank()) {
+            throw new TemplateSyntaxException(String.format("Layout path must not be empty at line %d, column %d.", token.line(), token.column()));
+        }
+        ASTNode body = parseBlock(cursor, ctx, null, null);
+        if (body instanceof BlockNode blockNode) {
+            for (ASTNode child : blockNode.getChildren()) {
+                if (child instanceof TextNode tn) {
+                    if (!tn.getText().isBlank()) {
+                        throw new TemplateSyntaxException("Content outside section blocks is forbidden in layout templates.");
+                    }
+                } else if (!(child instanceof SectionNode)) {
+                    throw new TemplateSyntaxException("Directives outside section blocks are forbidden in layout templates.");
+                }
+            }
+        }
+        return new LayoutNode(layoutPath, body);
+    }
+
+    SectionNode parseSection(Token token, Cursor cursor, ParseContext ctx) {
+        if (ctx.isInSection()) {
+            throw new TemplateSyntaxException(String.format("Nested |section| is not allowed at line %d, column %d.", token.line(), token.column()));
+        }
+        String sectionName = token.value().substring("section ".length()).trim();
+        if (sectionName.isBlank()) {
+            throw new TemplateSyntaxException(String.format("Section name must not be empty at line %d, column %d.", token.line(), token.column()));
+        }
+        if (!ctx.getDefinedSections().add(sectionName)) {
+            throw new TemplateSyntaxException(String.format("Duplicate section '%s' at line %d, column %d.", sectionName, token.line(), token.column()));
+        }
+        ctx.setInSection(true);
+        try {
+            ASTNode body = parseBlock(cursor, ctx, TokenType.END_SECTION, "section");
+            if (cursor.hasNext() && cursor.peek().type() == TokenType.END_SECTION) {
+                cursor.next();
+            } else {
+                throw new TemplateSyntaxException(formatUnclosedError("section", token, "/section"));
+            }
+            return new SectionNode(sectionName, body);
+        } finally {
+            ctx.setInSection(false);
+        }
+    }
+
+    YieldNode parseYield(Token token) {
+        String sectionName = token.value().substring("yield ".length()).trim();
+        if (sectionName.isBlank()) {
+            throw new TemplateSyntaxException(String.format("Yield section name must not be empty at line %d, column %d.", token.line(), token.column()));
+        }
+        return new YieldNode(sectionName);
+    }
+
+    ComponentNode parseComponent(Token token, Cursor cursor, ParseContext ctx) {
+        String statement = token.value().substring("component ".length()).trim();
+        if (statement.isBlank()) {
+            throw new TemplateSyntaxException(String.format("Component directive must specify path at line %d, column %d.", token.line(), token.column()));
+        }
+        int withIndex = statement.indexOf(" with ");
+        String componentPath;
+        String modelExpr = null;
+        if (withIndex != -1) {
+            componentPath = statement.substring(0, withIndex).trim();
+            modelExpr = statement.substring(withIndex + 6).trim();
+        } else {
+            componentPath = statement;
+        }
+
+        ctx.incrementComponentDepth();
+        try {
+            ASTNode body = parseBlock(cursor, ctx, TokenType.END_COMPONENT, "component");
+            if (cursor.hasNext() && cursor.peek().type() == TokenType.END_COMPONENT) {
+                cursor.next();
+            } else {
+                throw new TemplateSyntaxException(formatUnclosedError("component", token, "/component"));
+            }
+            if (body instanceof BlockNode blockNode) {
+                boolean hasSlots = blockNode.getChildren().stream().anyMatch(c -> c instanceof SlotNode);
+                if (hasSlots) {
+                    java.util.Set<String> seenSlots = new java.util.HashSet<>();
+                    for (ASTNode child : blockNode.getChildren()) {
+                        if (child instanceof SlotNode sn) {
+                            if (!seenSlots.add(sn.getSlotName())) {
+                                throw new TemplateSyntaxException("Duplicate slot '" + sn.getSlotName() + "' declaration in component caller.");
+                            }
+                        } else if (child instanceof TextNode tn) {
+                            if (!tn.getText().isBlank()) {
+                                throw new TemplateSyntaxException("Content outside slot blocks is forbidden inside component caller.");
+                            }
+                        } else {
+                            throw new TemplateSyntaxException("Directives outside slot blocks are forbidden inside component caller.");
+                        }
+                    }
+                }
+            }
+            return new ComponentNode(componentPath, modelExpr, body, evaluator);
+        } finally {
+            ctx.decrementComponentDepth();
+        }
+    }
+
+    SlotNode parseSlot(Token token, Cursor cursor, ParseContext ctx) {
+        if (ctx.isInSlot()) {
+            throw new TemplateSyntaxException("Nested slot declarations are forbidden at line " + token.line() + ", column " + token.column() + ".");
+        }
+        String slotName = token.value().substring("slot ".length()).trim();
+        if (slotName.isBlank()) {
+            throw new TemplateSyntaxException("Slot name must not be empty at line " + token.line() + ", column " + token.column() + ".");
+        }
+        if (ctx.getComponentDepth() == 0 && !ctx.isInComponentTemplate()) {
+            throw new TemplateSyntaxException("Slot declaration outside component context at line " + token.line() + ", column " + token.column() + ".");
+        }
+        if (ctx.getComponentDepth() == 0 && ctx.isInComponentTemplate()) {
+            return new SlotNode(slotName, new TextNode(""), true);
+        }
+
+        ctx.setInSlot(true);
+        try {
+            ASTNode body = parseBlock(cursor, ctx, TokenType.END_SLOT, "slot");
+            if (cursor.hasNext() && cursor.peek().type() == TokenType.END_SLOT) {
+                cursor.next();
+            } else {
+                throw new TemplateSyntaxException(formatUnclosedError("slot", token, "/slot"));
+            }
+            return new SlotNode(slotName, body, false);
+        } finally {
+            ctx.setInSlot(false);
+        }
+    }
+
+    AttemptNode parseAttempt(Token attemptToken, Cursor cursor, ParseContext ctx) {
+        ctx.incrementAttemptDepth();
+        try {
+            ASTNode body = parseBlock(cursor, ctx, TokenType.RECOVER, "attempt");
+
+            ASTNode recoverBlock = null;
+            String errorVarName = null;
+
+            if (cursor.hasNext() && cursor.peek().type() == TokenType.RECOVER) {
+                Token recoverToken = cursor.next();
+                String val = recoverToken.value().substring("recover".length()).trim();
+                if (val.startsWith("as ")) {
+                    errorVarName = val.substring("as ".length()).trim();
+                } else if (!val.isEmpty()) {
+                    throw new TemplateSyntaxException(String.format("Invalid recover directive syntax at line %d, column %d: %s", recoverToken.line(), recoverToken.column(), recoverToken.value()));
+                }
+
+                recoverBlock = parseBlock(cursor, ctx, TokenType.END_ATTEMPT, "attempt");
+                if (cursor.hasNext() && cursor.peek().type() == TokenType.RECOVER) {
+                    throw new TemplateSyntaxException(String.format("Multiple |recover| blocks inside |attempt| at line %d, column %d.", cursor.peek().line(), cursor.peek().column()));
+                }
+            }
+
+            if (cursor.hasNext() && cursor.peek().type() == TokenType.END_ATTEMPT) {
+                cursor.next();
+            } else {
+                throw new TemplateSyntaxException(formatUnclosedError("attempt", attemptToken, "/attempt"));
+            }
+
+            return new AttemptNode(body, recoverBlock, errorVarName);
+        } finally {
+            ctx.decrementAttemptDepth();
+        }
+    }
+
+    void parsePageMetadata(Token token, ParseContext ctx) {
         String val = token.value().substring("page ".length()).trim();
         int eqIndex = val.indexOf('=');
         if (eqIndex != -1) {
             String key = val.substring(0, eqIndex).trim();
             String valueStr = val.substring(eqIndex + 1).trim();
             Object value = parseMetadataValue(valueStr);
-            threadLocalMetadata.get().put(key, value);
+            ctx.getMetadata().put(key, value);
         }
     }
 
-    private Object parseMetadataValue(String str) {
+    Object parseMetadataValue(String str) {
         if (str.startsWith("\"") && str.endsWith("\"")) {
             return str.substring(1, str.length() - 1);
         }
@@ -446,13 +758,9 @@ public final class Parser {
             if (inner.isEmpty()) {
                 return List.of();
             }
-            List<String> items = new ArrayList<>();
+            List<Object> items = new ArrayList<>();
             for (String item : inner.split(",")) {
-                String trimmed = item.trim();
-                if ((trimmed.startsWith("\"") && trimmed.endsWith("\"")) || (trimmed.startsWith("'") && trimmed.endsWith("'"))) {
-                    trimmed = trimmed.substring(1, trimmed.length() - 1);
-                }
-                items.add(trimmed);
+                items.add(parseMetadataValue(item.trim()));
             }
             return items;
         }
@@ -464,41 +772,7 @@ public final class Parser {
         return str;
     }
 
-    private int attemptDepth = 0;
-
-    private io.lemadane.piped.template.engine.ast.AttemptNode parseAttempt(Token attemptToken, Cursor cursor) {
-        attemptDepth++;
-        try {
-            ASTNode body = parseBlock(cursor, null);
-
-            ASTNode recoverBlock = null;
-            String errorVarName = null;
-
-            if (cursor.hasNext() && cursor.peek().type() == TokenType.RECOVER) {
-                Token recoverToken = cursor.next();
-                String val = recoverToken.value().substring("recover".length()).trim();
-                if (val.startsWith("as ")) {
-                    errorVarName = val.substring("as ".length()).trim();
-                } else if (!val.isEmpty()) {
-                    throw new TemplateSyntaxException("Invalid recover directive syntax: " + recoverToken.value());
-                }
-
-                recoverBlock = parseBlock(cursor, TokenType.END_ATTEMPT);
-            }
-
-            if (cursor.hasNext() && cursor.peek().type() == TokenType.END_ATTEMPT) {
-                cursor.next();
-            } else {
-                throw new TemplateSyntaxException("Missing closing |/attempt|.");
-            }
-
-            return new io.lemadane.piped.template.engine.ast.AttemptNode(body, recoverBlock, errorVarName);
-        } finally {
-            attemptDepth--;
-        }
-    }
-
-    private PWANode parsePWA(Token token) {
+    PWANode parsePWA(Token token) {
         String val = token.value().trim();
         if (val.startsWith("pwa")) {
             val = val.substring(3).trim();
@@ -511,17 +785,10 @@ public final class Parser {
         String sw = getFirstPWAAttr(attrs, "sw", "serviceWorker", "service-worker", "service_worker");
         String statusColor = getFirstPWAAttr(attrs, "statusColor", "status-color", "status_color", "statusbar-color", "statusbarColor");
 
-        return new PWANode(
-            name,
-            manifest,
-            theme,
-            icon,
-            sw,
-            statusColor
-        );
+        return new PWANode(name, manifest, theme, icon, sw, statusColor);
     }
 
-    private String getFirstPWAAttr(java.util.Map<String, String> attrs, String... keys) {
+    String getFirstPWAAttr(java.util.Map<String, String> attrs, String... keys) {
         for (String key : keys) {
             String val = attrs.get(key);
             if (val != null && !val.isEmpty()) {
@@ -531,14 +798,14 @@ public final class Parser {
         return null;
     }
 
-    private HTMXNode parseHTMX(Token token) {
+    HTMXNode parseHTMX(Token token) {
         String val = token.value().trim();
         if (val.startsWith("htmx")) {
             val = val.substring(4).trim();
         }
         java.util.Map<String, String> attrs = parseKeyValuePairs(val);
         List<String> extensions = new ArrayList<>();
-        String extStr = attrs.get("ext");
+        String extStr = attrs.get("ext") != null ? attrs.get("ext") : attrs.get("extensions");
         if (extStr != null && !extStr.isEmpty()) {
             for (String e : extStr.split(",")) {
                 String trimmed = e.trim();
@@ -560,7 +827,7 @@ public final class Parser {
         );
     }
 
-    private HXAttrNode parseHXAttr(Token token) {
+    HXAttrNode parseHXAttr(Token token) {
         String val = token.value().trim();
         String method = "get";
         if (val.startsWith("htmx-post ")) {
@@ -579,28 +846,15 @@ public final class Parser {
             val = val.substring(9).trim();
         }
 
-        String urlPath = "";
-        String attrsStr = val;
-
-        if (!val.isEmpty() && (val.charAt(0) == '\'' || val.charAt(0) == '"')) {
-            char quote = val.charAt(0);
-            int end = val.indexOf(quote, 1);
-            if (end != -1) {
-                urlPath = val.substring(1, end);
-                attrsStr = val.substring(end + 1).trim();
-            }
-        } else {
-            String[] parts = val.split("\\s+");
-            if (parts.length > 0) {
-                urlPath = parts[0];
-                if (val.length() > urlPath.length()) {
-                    attrsStr = val.substring(urlPath.length()).trim();
-                } else {
-                    attrsStr = "";
-                }
-            }
+        String urlPath = val;
+        String attrsStr = "";
+        int spaceIdx = val.indexOf(' ');
+        if (spaceIdx != -1) {
+            urlPath = val.substring(0, spaceIdx).trim();
+            attrsStr = val.substring(spaceIdx + 1).trim();
         }
 
+        urlPath = unquote(urlPath);
         java.util.Map<String, String> attrs = parseKeyValuePairs(attrsStr);
         return new HXAttrNode(
             method,
@@ -612,7 +866,18 @@ public final class Parser {
         );
     }
 
-    private AlpineNode parseAlpine(Token token) {
+    String unquote(String s) {
+        if (s == null) return "";
+        s = s.trim();
+        if ((s.startsWith("'") && s.endsWith("'")) || (s.startsWith("\"") && s.endsWith("\""))) {
+            if (s.length() >= 2) {
+                return s.substring(1, s.length() - 1);
+            }
+        }
+        return s;
+    }
+
+    AlpineNode parseAlpine(Token token) {
         String val = token.value().trim();
         if (val.startsWith("alpine")) {
             val = val.substring(6).trim();
@@ -643,7 +908,7 @@ public final class Parser {
         );
     }
 
-    private StateNode parseState(Token token) {
+    StateNode parseState(Token token) {
         String val = token.value().trim();
         if (val.startsWith("alpine-data")) {
             val = val.substring(11).trim();
@@ -652,7 +917,7 @@ public final class Parser {
         return new StateNode(attrs);
     }
 
-    private AlpineAttrNode parseAlpineAttr(Token token) {
+    AlpineAttrNode parseAlpineAttr(Token token) {
         String val = token.value().trim();
         String[] parts = val.split("\\s+", 2);
         String dir = parts[0];
@@ -666,7 +931,12 @@ public final class Parser {
         return new AlpineAttrNode(dir, expr);
     }
 
-    private java.util.Map<String, String> parseKeyValuePairs(String input) {
+    String formatUnclosedError(String directive, Token openToken, String expectedClose) {
+        return String.format("Unclosed |%s| at line %d, column %d; expected |%s| before end of template.",
+                directive, openToken.line(), openToken.column(), expectedClose);
+    }
+
+    java.util.Map<String, String> parseKeyValuePairs(String input) {
         java.util.Map<String, String> result = new java.util.HashMap<>();
         int i = 0;
         while (i < input.length()) {
@@ -704,38 +974,40 @@ public final class Parser {
                     i = end + 1;
                 }
             } else {
-                int start = i;
-                while (i < input.length() && !Character.isWhitespace(input.charAt(i))) {
-                    i++;
+                int end = i;
+                while (end < input.length() && !Character.isWhitespace(input.charAt(end))) {
+                    end++;
                 }
-                val = input.substring(start, i);
+                val = input.substring(i, end);
+                i = end;
             }
-
-            if (!key.isEmpty()) {
-                result.put(key, val);
-            }
+            result.put(key, val);
         }
         return result;
     }
 
-    private static class Cursor {
-        private final List<Token> tokens;
-        private int index = 0;
+    static final class Cursor {
+        final List<Token> tokens;
+        int pos = 0;
 
         Cursor(List<Token> tokens) {
             this.tokens = tokens;
         }
 
         boolean hasNext() {
-            return index < tokens.size();
+            return pos < tokens.size();
         }
 
         Token peek() {
-            return tokens.get(index);
+            return tokens.get(pos);
         }
 
         Token next() {
-            return tokens.get(index++);
+            return tokens.get(pos++);
+        }
+
+        int position() {
+            return pos;
         }
     }
 }

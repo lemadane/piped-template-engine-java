@@ -12,11 +12,11 @@ import io.lemadane.piped.template.engine.exceptions.TemplateRenderException;
 import io.lemadane.piped.template.engine.exceptions.TemplateSyntaxException;
 
 public final class PropertyReader {
-    private static final MethodHandles.Lookup LOOKUP = MethodHandles.lookup();
-    private static final MethodHandle NULL_HANDLE = null;
+    static final MethodHandles.Lookup LOOKUP = MethodHandles.lookup();
+    static final MethodHandle NULL_HANDLE = null;
 
-    private final Map<String, MethodHandle> handleCache = new ConcurrentHashMap<>();
-    private final Map<String, Path> pathCache = new ConcurrentHashMap<>();
+    final Map<String, MethodHandle> handleCache = new ConcurrentHashMap<>();
+    final Map<String, Path> pathCache = new ConcurrentHashMap<>();
 
     public Object readPath(String expression, TemplateContext context) {
         final var path = pathCache.computeIfAbsent(expression, this::parsePath);
@@ -41,7 +41,7 @@ public final class PropertyReader {
         return current;
     }
 
-    private Object readProperty(Object source, String propertyName, boolean optional) {
+    Object readProperty(Object source, String propertyName, boolean optional) {
         String cleanPropName = propertyName.endsWith("()") ? propertyName.substring(0, propertyName.length() - 2) : propertyName;
 
         if (source instanceof Map<?, ?> map) {
@@ -100,7 +100,7 @@ public final class PropertyReader {
                 "Unknown property '" + propertyName + "' on " + sourceType.getName() + ".");
     }
 
-    private MethodHandle findAndCreateHandle(Class<?> sourceType, String propertyName) {
+    MethodHandle findAndCreateHandle(Class<?> sourceType, String propertyName) {
         try {
             final var recordAccessor = findZeroArgumentMethod(sourceType, propertyName);
             if (recordAccessor != null) {
@@ -131,7 +131,7 @@ public final class PropertyReader {
         return null;
     }
 
-    private Object readMapEntryProperty(
+    Object readMapEntryProperty(
             Map.Entry<?, ?> entry,
             String propertyName,
             boolean optional) {
@@ -149,7 +149,7 @@ public final class PropertyReader {
         };
     }
 
-    private Path parsePath(String expression) {
+    Path parsePath(String expression) {
         final var trimmedExpression = expression.trim();
 
         if (trimmedExpression.isBlank()) {
@@ -229,7 +229,7 @@ public final class PropertyReader {
                 java.util.List.copyOf(segments));
     }
 
-    private Method findZeroArgumentMethod(Class<?> sourceType, String methodName) {
+    Method findZeroArgumentMethod(Class<?> sourceType, String methodName) {
         try {
             final var method = sourceType.getMethod(methodName);
 
@@ -243,7 +243,7 @@ public final class PropertyReader {
         }
     }
 
-    private Field findPublicField(Class<?> sourceType, String fieldName) {
+    Field findPublicField(Class<?> sourceType, String fieldName) {
         try {
             return sourceType.getField(fieldName);
         } catch (NoSuchFieldException exception) {
@@ -251,7 +251,7 @@ public final class PropertyReader {
         }
     }
 
-    private String capitalize(String value) {
+    String capitalize(String value) {
         if (value == null || value.isBlank()) {
             return value;
         }
@@ -263,12 +263,12 @@ public final class PropertyReader {
         return Character.toUpperCase(value.charAt(0)) + value.substring(1);
     }
 
-    private record Path(
+    record Path(
             String rootName,
             java.util.List<PathSegment> segments) {
     }
 
-    private record PathSegment(
+    record PathSegment(
             String name,
             boolean optional) {
     }

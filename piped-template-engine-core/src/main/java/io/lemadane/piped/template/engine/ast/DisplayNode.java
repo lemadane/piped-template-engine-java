@@ -6,8 +6,8 @@ import java.io.IOException;
 import java.io.Writer;
 
 public final class DisplayNode implements ASTNode {
-    private final String propertyPath;
-    private final ExpressionEvaluator evaluator;
+    final String propertyPath;
+    final ExpressionEvaluator evaluator;
 
     public DisplayNode(String propertyPath, ExpressionEvaluator evaluator) {
         this.propertyPath = propertyPath;

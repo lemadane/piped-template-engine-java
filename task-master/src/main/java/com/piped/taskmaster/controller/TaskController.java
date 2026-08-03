@@ -11,7 +11,7 @@ import java.util.UUID;
 @Controller
 public class TaskController {
 
-    private final List<Task> tasks = new ArrayList<>();
+    final List<Task> tasks = new ArrayList<>();
 
     public TaskController() {
         // Pre-populate with some sample tasks
@@ -59,7 +59,7 @@ public class TaskController {
         return "partials/task-list";
     }
 
-    private void populateModel(Model model) {
+    void populateModel(Model model) {
         long totalCount = tasks.size();
         long completedCount = tasks.stream()
                 .filter(task -> task != null && task.isCompleted())

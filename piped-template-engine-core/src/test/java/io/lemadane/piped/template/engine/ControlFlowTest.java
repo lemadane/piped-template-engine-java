@@ -13,7 +13,7 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
 class ControlFlowTest {
-    private final TemplateEngine engine = new TemplateEngine();
+    final TemplateEngine engine = new TemplateEngine();
 
     @Nested
     @DisplayName("Continue directive tests")
@@ -308,7 +308,7 @@ class ControlFlowTest {
         }
     }
 
-    private static String compact(String value) {
+    static String compact(String value) {
         return value.replaceAll("\\s+", " ").trim();
     }
 }

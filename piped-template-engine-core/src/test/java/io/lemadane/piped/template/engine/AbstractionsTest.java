@@ -9,7 +9,7 @@ import io.lemadane.piped.template.engine.expression.TemplateContext;
 import static org.junit.jupiter.api.Assertions.*;
 
 class AbstractionsTest {
-    private final TemplateEngine engine = new TemplateEngine();
+    final TemplateEngine engine = new TemplateEngine();
 
     @Test
     @DisplayName("Renders PWANode correctly in both interpreter and bytecode modes")

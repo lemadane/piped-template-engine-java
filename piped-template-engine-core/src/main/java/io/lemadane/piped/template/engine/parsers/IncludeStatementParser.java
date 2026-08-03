@@ -48,7 +48,7 @@ public final class IncludeStatementParser {
             true);
    }
 
-   private int findWithIndex(String body) {
+   int findWithIndex(String body) {
       boolean insideSingleQuote = false;
       boolean insideDoubleQuote = false;
       int parenthesisDepth = 0;

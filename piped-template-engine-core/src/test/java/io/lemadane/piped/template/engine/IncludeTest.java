@@ -311,12 +311,12 @@ class IncludeTest {
       }
    }
 
-   private record Product(
+   record Product(
          String name,
          int price) {
    }
 
-   private static String compact(String value) {
+   static String compact(String value) {
       return value
             .replaceAll("\\s+", " ")
             .trim();

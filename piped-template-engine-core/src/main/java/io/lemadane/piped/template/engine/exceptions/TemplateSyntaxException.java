@@ -1,6 +1,6 @@
 package io.lemadane.piped.template.engine.exceptions;
 
-public class TemplateSyntaxException extends RuntimeException {
+public class TemplateSyntaxException extends TemplateRenderException {
    public TemplateSyntaxException(String message) {
       super(message);
    }

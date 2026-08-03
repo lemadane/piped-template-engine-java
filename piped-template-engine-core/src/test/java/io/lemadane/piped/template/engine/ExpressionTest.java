@@ -10,7 +10,7 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
 class ExpressionTest {
-   private final TemplateEngine engine = new TemplateEngine();
+   final TemplateEngine engine = new TemplateEngine();
 
    @Nested
    @DisplayName("Property access")
@@ -54,7 +54,7 @@ class ExpressionTest {
                html);
       }
 
-      private record UserRecord(String name, int age) {}
+      record UserRecord(String name, int age) {}
 
       @Test
       @DisplayName("Reads values from Java record classes")
@@ -594,7 +594,7 @@ class ExpressionTest {
       }
    }
 
-   private static String compact(String value) {
+   static String compact(String value) {
       return value
             .replaceAll("\\s+", " ")
             .trim();

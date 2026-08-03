@@ -1,7 +1,7 @@
 package io.lemadane.piped.template.engine.exceptions;
 
 public final class LoopContinueException extends RuntimeException {
-    private final String partialOutput;
+    final String partialOutput;
 
     public LoopContinueException() {
         this("");

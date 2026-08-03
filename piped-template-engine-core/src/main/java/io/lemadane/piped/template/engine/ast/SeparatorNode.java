@@ -5,7 +5,7 @@ import java.io.IOException;
 import java.io.Writer;
 
 public final class SeparatorNode implements ASTNode {
-    private final ASTNode body;
+    final ASTNode body;
 
     public SeparatorNode(ASTNode body) {
         this.body = body;

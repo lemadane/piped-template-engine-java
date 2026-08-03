@@ -8,8 +8,8 @@ import java.io.Writer;
 import java.util.Map;
 
 public final class CompiledTemplate {
-    private final ASTNode rootNode;
-    private final Map<String, Object> metadata;
+    final ASTNode rootNode;
+    final Map<String, Object> metadata;
 
     public CompiledTemplate(ASTNode rootNode) {
         this(rootNode, Map.of());

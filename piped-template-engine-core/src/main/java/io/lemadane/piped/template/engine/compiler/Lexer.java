@@ -19,21 +19,22 @@ public final class Lexer {
             int pipeIndex = template.indexOf('|', cursor);
 
             if (pipeIndex == -1) {
-                tokens.add(new Token(TokenType.TEXT, template.substring(cursor), cursor));
+                tokens.add(createToken(template, TokenType.TEXT, template.substring(cursor), cursor));
                 break;
             }
 
             if (pipeIndex > cursor) {
-                tokens.add(new Token(TokenType.TEXT, template.substring(cursor, pipeIndex), cursor));
+                tokens.add(createToken(template, TokenType.TEXT, template.substring(cursor, pipeIndex), cursor));
             }
 
             // Check for comment |-- ... --|
             if (template.startsWith("|--", pipeIndex)) {
                 int commentEnd = template.indexOf("--|", pipeIndex + 3);
                 if (commentEnd == -1) {
-                    throw new TemplateSyntaxException("Unclosed comment starting at index " + pipeIndex);
+                    int[] lc = calculateLineAndColumn(template, pipeIndex);
+                    throw new TemplateSyntaxException("Unclosed comment at line " + lc[0] + ", column " + lc[1] + ".");
                 }
-                tokens.add(new Token(TokenType.COMMENT, template.substring(pipeIndex + 3, commentEnd), pipeIndex));
+                tokens.add(createToken(template, TokenType.COMMENT, template.substring(pipeIndex + 3, commentEnd), pipeIndex));
                 cursor = commentEnd + 3;
                 continue;
             }
@@ -41,20 +42,40 @@ public final class Lexer {
             // Standard expression or directive pipe
             int closingPipe = template.indexOf('|', pipeIndex + 1);
             if (closingPipe == -1) {
-                throw new TemplateSyntaxException("Missing closing pipe for expression starting at index " + pipeIndex);
+                int[] lc = calculateLineAndColumn(template, pipeIndex);
+                throw new TemplateSyntaxException("Missing closing pipe for expression at line " + lc[0] + ", column " + lc[1] + ".");
             }
 
             String content = template.substring(pipeIndex + 1, closingPipe).trim();
             TokenType type = classifyToken(content);
 
-            tokens.add(new Token(type, content, pipeIndex));
+            tokens.add(createToken(template, type, content, pipeIndex));
             cursor = closingPipe + 1;
         }
 
         return tokens;
     }
 
-    private TokenType classifyToken(String content) {
+    Token createToken(String template, TokenType type, String value, int position) {
+        int[] lc = calculateLineAndColumn(template, position);
+        return new Token(type, value, position, lc[0], lc[1]);
+    }
+
+    int[] calculateLineAndColumn(String text, int targetIndex) {
+        int line = 1;
+        int col = 1;
+        for (int i = 0; i < targetIndex && i < text.length(); i++) {
+            if (text.charAt(i) == '\n') {
+                line++;
+                col = 1;
+            } else {
+                col++;
+            }
+        }
+        return new int[]{line, col};
+    }
+
+    TokenType classifyToken(String content) {
         if (content.startsWith("if ")) {
             return TokenType.IF;
         } else if (content.startsWith("else if ") || content.startsWith("else-if ")) {

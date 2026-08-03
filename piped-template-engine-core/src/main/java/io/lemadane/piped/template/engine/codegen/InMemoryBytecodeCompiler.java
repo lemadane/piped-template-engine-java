@@ -22,12 +22,75 @@ public final class InMemoryBytecodeCompiler {
         JavaFileObject fileObject = new StringJavaFileObject(fullClassName, javaSource);
 
         Map<String, ByteArrayOutputStream> byteCodeMap = new HashMap<>();
-        MemoryJavaFileManager fileManager = new MemoryJavaFileManager(
-                compiler.getStandardFileManager(null, null, null), byteCodeMap);
-
         DiagnosticCollector<JavaFileObject> diagnostics = new DiagnosticCollector<>();
+        StandardJavaFileManager sfm = compiler.getStandardFileManager(diagnostics, null, null);
+        List<String> cpElements = new ArrayList<>();
+        addClassRoot(io.lemadane.piped.template.engine.TemplateEngine.class, cpElements);
+        addClassRoot(getClass(), cpElements);
+        String sysCp = System.getProperty("java.class.path");
+        if (sysCp != null && !sysCp.isEmpty()) {
+            cpElements.add(sysCp);
+        }
+
+        try {
+            ClassLoader cl = getClass().getClassLoader();
+            while (cl != null) {
+                if (cl instanceof java.net.URLClassLoader ucl) {
+                    for (java.net.URL url : ucl.getURLs()) {
+                        try {
+                            cpElements.add(new java.io.File(url.toURI()).getAbsolutePath());
+                        } catch (Exception ignored) {}
+                    }
+                }
+                cl = cl.getParent();
+            }
+            ClassLoader tcl = Thread.currentThread().getContextClassLoader();
+            while (tcl != null) {
+                if (tcl instanceof java.net.URLClassLoader ucl) {
+                    for (java.net.URL url : ucl.getURLs()) {
+                        try {
+                            cpElements.add(new java.io.File(url.toURI()).getAbsolutePath());
+                        } catch (Exception ignored) {}
+                    }
+                }
+                tcl = tcl.getParent();
+            }
+        } catch (Exception ignored) {}
+        try {
+            java.io.File coreClasses = new java.io.File("piped-template-engine-core/build/classes/java/main");
+            if (coreClasses.exists()) {
+                cpElements.add(coreClasses.getAbsolutePath());
+            }
+            java.io.File buildClasses = new java.io.File("build/classes/java/main");
+            if (buildClasses.exists()) {
+                cpElements.add(buildClasses.getAbsolutePath());
+            }
+        } catch (Exception ignored) {}
+
+        List<java.io.File> cpFiles = new ArrayList<>();
+        Set<String> added = new HashSet<>();
+        for (String path : cpElements) {
+            if (path != null && !path.isBlank()) {
+                for (String singlePath : path.split(java.io.File.pathSeparator)) {
+                    if (!singlePath.isBlank() && added.add(singlePath)) {
+                        java.io.File f = new java.io.File(singlePath);
+                        if (f.exists()) {
+                            cpFiles.add(f);
+                        }
+                    }
+                }
+            }
+        }
+        String fullCp = cpFiles.stream().map(java.io.File::getAbsolutePath).reduce((a, b) -> a + java.io.File.pathSeparator + b).orElse("");
+        List<String> options = List.of("-classpath", fullCp);
+
+        try {
+            sfm.setLocation(StandardLocation.CLASS_PATH, cpFiles);
+        } catch (Exception ignored) {}
+
+        MemoryJavaFileManager fileManager = new MemoryJavaFileManager(sfm, byteCodeMap);
         JavaCompiler.CompilationTask task = compiler.getTask(
-                null, fileManager, diagnostics, null, null, Collections.singletonList(fileObject));
+                null, fileManager, diagnostics, options, null, Collections.singletonList(fileObject));
 
         boolean success = task.call();
         if (!success) {
@@ -42,8 +105,8 @@ public final class InMemoryBytecodeCompiler {
         return classLoader.loadClass(fullClassName);
     }
 
-    private static class StringJavaFileObject extends SimpleJavaFileObject {
-        private final String code;
+    static class StringJavaFileObject extends SimpleJavaFileObject {
+        final String code;
 
         StringJavaFileObject(String className, String code) {
             super(URI.create("string:///" + className.replace('.', '/') + Kind.SOURCE.extension), Kind.SOURCE);
@@ -56,8 +119,8 @@ public final class InMemoryBytecodeCompiler {
         }
     }
 
-    private static class MemoryJavaFileManager extends ForwardingJavaFileManager<StandardJavaFileManager> {
-        private final Map<String, ByteArrayOutputStream> byteCodeMap;
+    static class MemoryJavaFileManager extends ForwardingJavaFileManager<StandardJavaFileManager> {
+        final Map<String, ByteArrayOutputStream> byteCodeMap;
 
         MemoryJavaFileManager(StandardJavaFileManager fileManager, Map<String, ByteArrayOutputStream> byteCodeMap) {
             super(fileManager);
@@ -77,8 +140,8 @@ public final class InMemoryBytecodeCompiler {
         }
     }
 
-    private static class MemoryClassLoader extends ClassLoader {
-        private final Map<String, ByteArrayOutputStream> byteCodeMap;
+    static class MemoryClassLoader extends ClassLoader {
+        final Map<String, ByteArrayOutputStream> byteCodeMap;
 
         MemoryClassLoader(Map<String, ByteArrayOutputStream> byteCodeMap, ClassLoader parent) {
             super(parent);
@@ -94,5 +157,37 @@ public final class InMemoryBytecodeCompiler {
             byte[] bytes = baos.toByteArray();
             return defineClass(name, bytes, 0, bytes.length);
         }
+    }
+
+    static void addClassRoot(Class<?> clazz, List<String> cpElements) {
+        try {
+            var location = clazz.getProtectionDomain().getCodeSource() != null ? clazz.getProtectionDomain().getCodeSource().getLocation() : null;
+            if (location != null) {
+                cpElements.add(new java.io.File(location.toURI()).getAbsolutePath());
+            }
+        } catch (Exception ignored) {}
+
+        try {
+            String classResourceName = clazz.getSimpleName() + ".class";
+            java.net.URL url = clazz.getResource(classResourceName);
+            if (url != null) {
+                String urlStr = url.toExternalForm();
+                String pkgPath = clazz.getPackageName().replace('.', '/') + "/" + classResourceName;
+                if (urlStr.endsWith(pkgPath)) {
+                    String rootUrlStr = urlStr.substring(0, urlStr.length() - pkgPath.length());
+                    if (rootUrlStr.startsWith("file:")) {
+                        java.io.File file = new java.io.File(new java.net.URI(rootUrlStr));
+                        cpElements.add(file.getAbsolutePath());
+                    } else if (rootUrlStr.startsWith("jar:file:")) {
+                        int bang = rootUrlStr.indexOf("!");
+                        if (bang != -1) {
+                            String jarUriStr = rootUrlStr.substring(4, bang);
+                            java.io.File file = new java.io.File(new java.net.URI(jarUriStr));
+                            cpElements.add(file.getAbsolutePath());
+                        }
+                    }
+                }
+            }
+        } catch (Exception ignored) {}
     }
 }

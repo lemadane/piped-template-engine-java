@@ -12,7 +12,7 @@ public final class JsonEscaper {
       return toJson(value);
    }
 
-   private String toJson(Object value) {
+   String toJson(Object value) {
       if (value == null) {
          return "null";
       }
@@ -44,7 +44,7 @@ public final class JsonEscaper {
       return mapToJson(objectToMap(value));
    }
 
-   private String numberToJson(Number numberValue) {
+   String numberToJson(Number numberValue) {
       final var text = String.valueOf(numberValue);
 
       if ("NaN".equals(text) || "Infinity".equals(text) || "-Infinity".equals(text)) {
@@ -54,7 +54,7 @@ public final class JsonEscaper {
       return text;
    }
 
-   private String stringToJson(String value) {
+   String stringToJson(String value) {
       final var escaped = new StringBuilder(value.length() + 2);
       escaped.append('"');
 
@@ -88,7 +88,7 @@ public final class JsonEscaper {
       return escaped.toString();
    }
 
-   private String mapToJson(Map<?, ?> mapValue) {
+   String mapToJson(Map<?, ?> mapValue) {
       final var json = new StringBuilder();
       json.append('{');
 
@@ -111,7 +111,7 @@ public final class JsonEscaper {
       return json.toString();
    }
 
-   private String collectionToJson(Collection<?> collectionValue) {
+   String collectionToJson(Collection<?> collectionValue) {
       final var json = new StringBuilder();
       json.append('[');
 
@@ -132,7 +132,7 @@ public final class JsonEscaper {
       return json.toString();
    }
 
-   private String arrayToJson(Object arrayValue) {
+   String arrayToJson(Object arrayValue) {
       final var json = new StringBuilder();
       final var length = Array.getLength(arrayValue);
 
@@ -151,7 +151,7 @@ public final class JsonEscaper {
       return json.toString();
    }
 
-   private Map<String, Object> objectToMap(Object value) {
+   Map<String, Object> objectToMap(Object value) {
       final var values = new LinkedHashMap<String, Object>();
       final var type = value.getClass();
 
@@ -180,7 +180,7 @@ public final class JsonEscaper {
       return values;
    }
 
-   private String propertyNameFromMethod(Method method) {
+   String propertyNameFromMethod(Method method) {
       final var methodName = method.getName();
 
       if (methodName.startsWith("get") && methodName.length() > 3) {
@@ -198,7 +198,7 @@ public final class JsonEscaper {
       return null;
    }
 
-   private Object invokeMethod(Object source, Method method) {
+   Object invokeMethod(Object source, Method method) {
       try {
          return method.invoke(source);
       } catch (ReflectiveOperationException exception) {
@@ -206,7 +206,7 @@ public final class JsonEscaper {
       }
    }
 
-   private Object readField(Object source, Field field) {
+   Object readField(Object source, Field field) {
       try {
          return field.get(source);
       } catch (IllegalAccessException exception) {
@@ -214,7 +214,7 @@ public final class JsonEscaper {
       }
    }
 
-   private String decapitalize(String value) {
+   String decapitalize(String value) {
       if (value == null || value.isBlank()) {
          return value;
       }

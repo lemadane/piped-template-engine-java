@@ -10,7 +10,7 @@ import org.junit.jupiter.api.Test;
 import io.lemadane.piped.template.engine.exceptions.TemplateSyntaxException;
 
 class SwitchTest {
-   private final TemplateEngine engine = new TemplateEngine();
+   final TemplateEngine engine = new TemplateEngine();
 
    @Nested
    @DisplayName("Basic switch")
@@ -507,7 +507,7 @@ class SwitchTest {
       }
    }
 
-   private static String compact(String value) {
+   static String compact(String value) {
       return value
             .replaceAll("\\s+", " ")
             .trim();

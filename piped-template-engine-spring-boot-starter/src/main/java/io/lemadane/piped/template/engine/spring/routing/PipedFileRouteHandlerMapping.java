@@ -13,8 +13,8 @@ import java.util.*;
 
 public class PipedFileRouteHandlerMapping extends AbstractUrlHandlerMapping {
 
-    private final TemplateEngine templateEngine;
-    private final Map<String, PageDataLoader> dataLoaders = new HashMap<>();
+    final TemplateEngine templateEngine;
+    final Map<String, PageDataLoader> dataLoaders = new HashMap<>();
 
     public PipedFileRouteHandlerMapping(TemplateEngine templateEngine) {
         this.templateEngine = templateEngine;
@@ -31,7 +31,7 @@ public class PipedFileRouteHandlerMapping extends AbstractUrlHandlerMapping {
         discoverAndRegisterRoutes();
     }
 
-    private void discoverAndRegisterRoutes() {
+    void discoverAndRegisterRoutes() {
         try {
             PathMatchingResourcePatternResolver resolver = new PathMatchingResourcePatternResolver();
             Resource[] resources = resolver.getResources("classpath*:pte-routes/**/+page.pte");
@@ -50,7 +50,7 @@ public class PipedFileRouteHandlerMapping extends AbstractUrlHandlerMapping {
         }
     }
 
-    private String convertToSpringUrlPattern(String relativePath) {
+    String convertToSpringUrlPattern(String relativePath) {
         String path = relativePath.replace("+page.pte", "");
         if (path.endsWith("/")) {
             path = path.substring(0, path.length() - 1);
@@ -63,7 +63,7 @@ public class PipedFileRouteHandlerMapping extends AbstractUrlHandlerMapping {
     }
 
     @SuppressWarnings("unchecked")
-    private void registerFileRoute(String urlPattern, String relativePath, Resource resource) {
+    void registerFileRoute(String urlPattern, String relativePath, Resource resource) {
         HttpRequestHandler handler = (request, response) -> {
             try {
                 String templateContent = new String(resource.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);

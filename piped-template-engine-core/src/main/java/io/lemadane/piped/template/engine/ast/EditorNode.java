@@ -6,8 +6,8 @@ import java.io.IOException;
 import java.io.Writer;
 
 public final class EditorNode implements ASTNode {
-    private final String propertyPath;
-    private final ExpressionEvaluator evaluator;
+    final String propertyPath;
+    final ExpressionEvaluator evaluator;
 
     public EditorNode(String propertyPath, ExpressionEvaluator evaluator) {
         this.propertyPath = propertyPath;
